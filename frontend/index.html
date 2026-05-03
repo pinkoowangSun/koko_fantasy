@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Koko — Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
+
+  <div class="w-full max-w-sm" x-data="loginPage()" x-init="init()">
+    <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
+      <div class="text-5xl mb-3">🪄</div>
+      <h1 class="text-2xl font-bold text-gray-900 mb-1">Koko</h1>
+      <p class="text-gray-500 text-sm mb-8">Your personal life assistant</p>
+
+      <!-- Telegram Login Widget injected here -->
+      <div id="telegram-login-wrap" class="flex justify-center mb-4"></div>
+
+      <p class="text-xs text-gray-400">
+        Sign in with Telegram to get started.<br/>Your data is stored privately on your server.
+      </p>
+
+      <template x-if="error">
+        <p class="mt-4 text-sm text-red-500" x-text="error"></p>
+      </template>
+    </div>
+  </div>
+
+  <script>
+    // Called by Telegram widget
+    async function onTelegramAuth(user) {
+      try {
+        const resp = await fetch('/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user),
+        });
+        if (!resp.ok) throw new Error('Auth failed');
+        const data = await resp.json();
+        localStorage.setItem('koko_token', data.token);
+        window.location.href = '/dashboard';
+      } catch (e) {
+        document.querySelector('[x-data]').__x.$data.error = 'Login failed. Please try again.';
+      }
+    }
+
+    function loginPage() {
+      return {
+        error: null,
+        async init() {
+          // Redirect if already logged in
+          if (localStorage.getItem('koko_token')) {
+            window.location.href = '/dashboard';
+            return;
+          }
+          // Load bot username from config then inject widget
+          try {
+            const cfg = await fetch('/api/config').then(r => r.json());
+            const botUsername = cfg.telegram_bot_username;
+            if (!botUsername) {
+              this.error = 'TELEGRAM_BOT_USERNAME not configured on server.';
+              return;
+            }
+            const script = document.createElement('script');
+            script.async = true;
+            script.src = 'https://telegram.org/js/telegram-widget.js?22';
+            script.setAttribute('data-telegram-login', botUsername);
+            script.setAttribute('data-size', 'large');
+            script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+            script.setAttribute('data-request-access', 'write');
+            document.getElementById('telegram-login-wrap').appendChild(script);
+          } catch (e) {
+            this.error = 'Could not reach server.';
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

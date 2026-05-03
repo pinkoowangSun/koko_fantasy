@@ -1,0 +1,28 @@
+/* Base overrides on top of Tailwind */
+:root {
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+}
+
+body { font-family: 'Inter', system-ui, sans-serif; }
+
+/* Priority badges */
+.badge { @apply text-xs font-semibold px-2 py-0.5 rounded-full; }
+.badge-urgent { @apply bg-red-100 text-red-700; }
+.badge-high   { @apply bg-orange-100 text-orange-700; }
+.badge-medium { @apply bg-blue-100 text-blue-700; }
+.badge-low    { @apply bg-gray-100 text-gray-600; }
+
+/* Card */
+.card { @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4; }
+
+/* Sidebar nav link */
+.nav-link {
+  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600
+         hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-sm font-medium;
+}
+.nav-link.active { @apply bg-indigo-50 text-indigo-700; }
+
+/* Quill editor */
+.ql-container { border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; }
+.ql-toolbar  { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; }
