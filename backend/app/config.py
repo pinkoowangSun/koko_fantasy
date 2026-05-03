@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # Server
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    BOT_API_BASE: str = "http://localhost:8000"
 
     class Config:
         env_file = BASE_DIR / ".env"
