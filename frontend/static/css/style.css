@@ -1,28 +1,191 @@
-/* Base overrides on top of Tailwind */
-:root {
-  --accent: #6366f1;
-  --accent-light: #818cf8;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #F6F5F2;
+  color: #1A1917;
 }
 
-body { font-family: 'Inter', system-ui, sans-serif; }
+[x-cloak] { display: none !important; }
 
-/* Priority badges */
-.badge { @apply text-xs font-semibold px-2 py-0.5 rounded-full; }
-.badge-urgent { @apply bg-red-100 text-red-700; }
-.badge-high   { @apply bg-orange-100 text-orange-700; }
-.badge-medium { @apply bg-blue-100 text-blue-700; }
-.badge-low    { @apply bg-gray-100 text-gray-600; }
+/* ── Sidebar ───────────────────────────────────────────── */
+.sidebar {
+  width: 220px;
+  background: #fff;
+  border-right: 1px solid #E8E7E3;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 12px;
+  flex-shrink: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
 
-/* Card */
-.card { @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4; }
+.sidebar-logo {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1A1917;
+  padding: 4px 10px 0;
+  margin-bottom: 22px;
+  letter-spacing: -0.2px;
+}
 
-/* Sidebar nav link */
 .nav-link {
-  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600
-         hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-sm font-medium;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #78776E;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  line-height: 1.4;
 }
-.nav-link.active { @apply bg-indigo-50 text-indigo-700; }
+.nav-link:hover  { background: #F0EFE9; color: #1A1917; }
+.nav-link.active { background: #EDECE6; color: #1A1917; font-weight: 600; }
+.nav-link.danger:hover { background: #FEF2F2; color: #DC2626; }
 
-/* Quill editor */
-.ql-container { border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; }
-.ql-toolbar  { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; }
+/* ── Cards ─────────────────────────────────────────────── */
+.card {
+  background: #fff;
+  border: 1px solid #E8E7E3;
+  border-radius: 14px;
+  padding: 20px;
+}
+
+/* ── Buttons ───────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+  border: none;
+  font-family: inherit;
+  white-space: nowrap;
+  line-height: 1;
+}
+.btn-primary        { background: #1A1917; color: #fff; }
+.btn-primary:hover  { background: #333228; }
+.btn-secondary      { background: #fff; color: #1A1917; border: 1px solid #D6D5D0; }
+.btn-secondary:hover { background: #F6F5F2; }
+.btn-ghost          { background: transparent; color: #78776E; border: 1px solid transparent; }
+.btn-ghost:hover    { background: #F0EFE9; color: #1A1917; }
+.btn-danger         { background: #fff; color: #DC2626; border: 1px solid #FCA5A5; }
+.btn-danger:hover   { background: #FEF2F2; }
+.btn:disabled       { opacity: 0.45; cursor: not-allowed; }
+.btn-sm  { padding: 5px 12px; font-size: 12.5px; border-radius: 7px; }
+
+/* ── Inputs ────────────────────────────────────────────── */
+.input {
+  width: 100%;
+  border: 1px solid #D6D5D0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #1A1917;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.input:focus {
+  border-color: #1A1917;
+  box-shadow: 0 0 0 3px rgba(26,25,23,0.07);
+}
+.input::placeholder { color: #ABAAA5; }
+
+textarea.input { resize: vertical; }
+
+select.input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%2378776E' d='M5 7L0 2h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+.field-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #78776E;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ── Badges ────────────────────────────────────────────── */
+.badge         { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge-urgent  { background: #FEE2E2; color: #991B1B; }
+.badge-high    { background: #FFEDD5; color: #9A3412; }
+.badge-medium  { background: #DBEAFE; color: #1E40AF; }
+.badge-low     { background: #F3F4F6; color: #6B7280; }
+
+/* ── Modal ─────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.25);
+  backdrop-filter: blur(2px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-panel {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.14);
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 28px;
+}
+
+/* ── Page shell ────────────────────────────────────────── */
+.page-shell   { display: flex; height: 100vh; overflow: hidden; }
+.page-main    { flex: 1; overflow-y: auto; padding: 32px; }
+.page-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+.page-title   { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+
+/* ── Type picker (add entry) ───────────────────────────── */
+.type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 12px;
+  border: 1.5px solid #E8E7E3;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+  background: #fff;
+  text-align: center;
+}
+.type-card:hover {
+  border-color: #1A1917;
+  background: #F6F5F2;
+}
+.type-card .type-icon { font-size: 26px; }
+.type-card .type-label { font-size: 13px; font-weight: 600; color: #1A1917; }
+.type-card .type-desc  { font-size: 11.5px; color: #78776E; }

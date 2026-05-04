@@ -3,194 +3,519 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Koko — Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <title>Koko — Daily Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    /* Calendar overrides */
+    .fc { font-family: 'Inter', sans-serif; font-size: 13px; }
+    .fc-toolbar-title { font-size: 15px !important; font-weight: 600 !important; }
+    .fc-button { font-size: 12.5px !important; font-family: 'Inter', sans-serif !important; }
+    .fc-daygrid-day:hover { background: #F6F5F2 !important; cursor: pointer; }
+    .fc-col-header-cell { font-weight: 500; color: #78776E; font-size: 12px; }
+    .fc-daygrid-day-number { font-size: 12.5px; color: #1A1917; }
+    .fc-event { border-radius: 4px !important; border: none !important; font-size: 11px !important; }
+    .fc-toolbar.fc-header-toolbar { margin-bottom: 16px !important; }
+  </style>
 </head>
-<body class="bg-gray-50 min-h-screen" x-data="dashboardApp()" x-init="init()">
+<body x-data="dashboardApp()" x-init="init()">
 
-  <!-- Layout -->
-  <div class="flex h-screen overflow-hidden">
+<div class="page-shell">
 
-    <!-- Sidebar -->
-    <aside class="w-56 bg-white border-r border-gray-100 flex flex-col p-4 gap-1 shrink-0">
-      <div class="text-xl font-bold text-indigo-600 mb-6 px-2">🪄 Koko</div>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
       <a href="/dashboard" class="nav-link active">📅 Daily Tracker</a>
       <a href="/tasks"     class="nav-link">✅ Tasks</a>
       <a href="/documents" class="nav-link">📄 Documents</a>
       <a href="/profile"   class="nav-link">👤 Profile</a>
-      <div class="flex-1"></div>
-      <button @click="logout()" class="nav-link text-red-500 hover:bg-red-50 hover:text-red-600">🚪 Logout</button>
-    </aside>
+    </nav>
+    <div style="flex:1"></div>
+    <button @click="logout()" class="nav-link danger" style="color:#9CA3AF">
+      ← Sign out
+    </button>
+  </aside>
 
-    <!-- Main -->
-    <main class="flex-1 overflow-y-auto p-6">
+  <!-- Main -->
+  <main class="page-main">
 
-      <!-- Header + briefing button -->
-      <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">Daily Tracker</h1>
-        <button @click="loadBriefing()"
-          class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-          ✨ Today's Briefing
-        </button>
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Daily Tracker</h1>
+        <p style="font-size:13px;color:#78776E;margin-top:2px" x-text="todayLabel"></p>
       </div>
+      <div style="display:flex;gap:8px">
+        <button @click="loadBriefing()" class="btn btn-secondary">✨ Briefing</button>
+        <button @click="openAddEntry()" class="btn btn-primary">+ Add Entry</button>
+      </div>
+    </div>
 
-      <!-- Briefing panel -->
-      <template x-if="briefing">
-        <div class="card mb-6 bg-indigo-50 border-indigo-200">
-          <div class="flex justify-between items-start mb-2">
-            <h2 class="font-semibold text-indigo-700">✨ Daily Briefing</h2>
-            <button @click="briefing = null" class="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
-          </div>
-          <p class="text-gray-700 text-sm whitespace-pre-wrap" x-text="briefing"></p>
+    <!-- Briefing panel -->
+    <template x-if="briefing">
+      <div class="card" style="margin-bottom:20px;background:#FAFAF8;border-color:#E0DFD9">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <span style="font-size:13px;font-weight:600;color:#78776E">Today's Briefing</span>
+          <button @click="briefing=null" class="btn btn-ghost btn-sm" style="padding:2px 6px">✕</button>
         </div>
-      </template>
-
-      <!-- Calendar -->
-      <div class="card mb-6">
-        <div id="calendar"></div>
+        <p style="font-size:13.5px;color:#1A1917;line-height:1.7;white-space:pre-wrap" x-text="briefing"></p>
       </div>
+    </template>
 
-      <!-- Legend -->
-      <div class="flex gap-4 text-xs text-gray-500 mb-6">
-        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> Tasks</span>
-        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> Journal</span>
-        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span> Documents</span>
+    <!-- Calendar -->
+    <div class="card" style="margin-bottom:20px">
+      <div id="calendar"></div>
+    </div>
+
+    <!-- Legend -->
+    <div style="display:flex;gap:16px;font-size:12px;color:#78776E">
+      <span style="display:flex;align-items:center;gap:5px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#3B82F6;display:inline-block"></span> Tasks
+      </span>
+      <span style="display:flex;align-items:center;gap:5px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#10B981;display:inline-block"></span> Journal
+      </span>
+      <span style="display:flex;align-items:center;gap:5px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#F59E0B;display:inline-block"></span> Documents
+      </span>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Day Detail Modal ───────────────────────────────────────── -->
+<div x-show="dayModal" x-cloak
+     style="position:fixed;inset:0;background:rgba(0,0,0,0.36);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="dayModal=null">
+  <div style="background:#fff;border-radius:22px;box-shadow:0 32px 80px rgba(0,0,0,0.18);width:100%;max-width:420px;max-height:85vh;overflow-y:auto">
+
+    <!-- Header -->
+    <div style="padding:24px 24px 16px;display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;background:#fff;border-radius:22px 22px 0 0;z-index:1">
+      <div>
+        <p style="font-size:12px;font-weight:500;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Day Summary</p>
+        <h2 style="font-size:20px;font-weight:700;letter-spacing:-0.4px;color:#1A1917;margin:0" x-text="dayModal?.date"></h2>
       </div>
-    </main>
-  </div>
+      <button @click="dayModal=null"
+        style="width:30px;height:30px;border-radius:50%;background:#F0EFEC;border:none;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:4px">✕</button>
+    </div>
 
-  <!-- Day Detail Modal -->
-  <div x-show="modal" x-cloak class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-       @click.self="modal = null">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto p-6">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-bold text-gray-900" x-text="modal?.date"></h2>
-        <button @click="modal = null" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
-      </div>
+    <div style="padding:0 24px 28px">
 
-      <!-- Journal entries -->
-      <template x-if="modal?.journal?.length">
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-emerald-600 mb-2">📓 Journal</h3>
-          <template x-for="j in modal.journal" :key="j.id">
-            <div class="bg-emerald-50 rounded-lg p-3 mb-2">
-              <p class="text-sm font-medium text-gray-800" x-text="j.title || '(no title)'"></p>
+      <!-- Journal -->
+      <template x-if="dayModal?.journal?.length">
+        <div style="margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#10B981;display:inline-block;flex-shrink:0"></span>
+            <span style="font-size:12px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.5px">Journal</span>
+          </div>
+          <template x-for="j in dayModal.journal" :key="j.id">
+            <div style="padding:14px 0;border-bottom:1px solid #F3F4F6">
+              <p style="font-size:14px;font-weight:600;color:#1A1917;margin:0 0 4px" x-text="j.title || 'Entry'"></p>
               <template x-if="j.content_html">
-                <div class="text-sm text-gray-600 mt-1 prose prose-sm" x-html="j.content_html"></div>
+                <div style="font-size:13.5px;color:#4B4B47;line-height:1.6" x-html="j.content_html"></div>
               </template>
               <template x-if="!j.content_html && j.content">
-                <p class="text-sm text-gray-600 mt-1" x-text="j.content"></p>
+                <p style="font-size:13.5px;color:#4B4B47;line-height:1.6;margin:0" x-text="j.content"></p>
               </template>
-              <p class="text-xs text-gray-400 mt-1" x-text="j.mood ? '😊 ' + j.mood : ''"></p>
+              <template x-if="j.mood">
+                <span style="display:inline-block;margin-top:8px;font-size:12px;background:#F0FDF4;color:#16A34A;padding:2px 10px;border-radius:999px;font-weight:500" x-text="j.mood"></span>
+              </template>
             </div>
           </template>
         </div>
       </template>
 
       <!-- Tasks -->
-      <template x-if="modal?.tasks?.length">
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-blue-600 mb-2">✅ Tasks due</h3>
-          <template x-for="t in modal.tasks" :key="t.id">
-            <div class="flex items-center gap-2 text-sm py-1 border-b border-gray-50 last:border-0">
-              <span x-text="statusIcon(t.status)"></span>
-              <span class="flex-1 text-gray-800" x-text="t.title"></span>
-              <a :href="`/tasks`" class="text-xs text-indigo-500 hover:underline">View →</a>
+      <template x-if="dayModal?.tasks?.length">
+        <div style="margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#3B82F6;display:inline-block;flex-shrink:0"></span>
+            <span style="font-size:12px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.5px">Tasks</span>
+          </div>
+          <template x-for="t in dayModal.tasks" :key="t.id">
+            <div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F3F4F6">
+              <span x-text="statusIcon(t.status)" style="font-size:15px;flex-shrink:0"></span>
+              <span style="flex:1;font-size:14px;color:#1A1917;font-weight:500" x-text="t.title"></span>
+              <a href="/tasks" style="font-size:12.5px;color:#ABAAA5;text-decoration:none;flex-shrink:0">View →</a>
             </div>
           </template>
         </div>
       </template>
 
       <!-- Documents -->
-      <template x-if="modal?.documents?.length">
-        <div>
-          <h3 class="text-sm font-semibold text-amber-600 mb-2">📄 Documents</h3>
-          <template x-for="d in modal.documents" :key="d.id">
-            <div class="flex items-center justify-between text-sm py-1 border-b border-gray-50 last:border-0">
-              <span class="text-gray-800" x-text="d.original_name"></span>
-              <a :href="`/documents`" class="text-xs text-indigo-500 hover:underline">View →</a>
+      <template x-if="dayModal?.documents?.length">
+        <div style="margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#F59E0B;display:inline-block;flex-shrink:0"></span>
+            <span style="font-size:12px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.5px">Documents</span>
+          </div>
+          <template x-for="d in dayModal.documents" :key="d.id">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #F3F4F6">
+              <span style="font-size:14px;color:#1A1917;font-weight:500" x-text="d.original_name"></span>
+              <a href="/documents" style="font-size:12.5px;color:#ABAAA5;text-decoration:none;flex-shrink:0">View →</a>
             </div>
           </template>
         </div>
       </template>
 
-      <template x-if="!modal?.journal?.length && !modal?.tasks?.length && !modal?.documents?.length">
-        <p class="text-gray-400 text-sm text-center py-4">Nothing recorded on this day.</p>
+      <!-- Empty state -->
+      <template x-if="!dayModal?.journal?.length && !dayModal?.tasks?.length && !dayModal?.documents?.length">
+        <div style="text-align:center;padding:40px 0 16px">
+          <div style="width:56px;height:56px;background:#F6F5F2;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 14px">📭</div>
+          <p style="font-size:15px;font-weight:500;color:#1A1917;margin:0 0 4px">Nothing here yet</p>
+          <p style="font-size:13.5px;color:#ABAAA5;margin:0 0 20px">No entries recorded on this day.</p>
+          <button @click="dayModal=null; openAddEntry()"
+            style="background:#1A1917;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
+            + Add Entry
+          </button>
+        </div>
       </template>
+
+      <!-- Add to this day -->
+      <template x-if="dayModal?.journal?.length || dayModal?.tasks?.length || dayModal?.documents?.length">
+        <button @click="dayModal=null; openAddEntry()"
+          style="width:100%;height:44px;background:#F6F5F2;color:#1A1917;border:none;border-radius:12px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:4px">
+          + Add Another Entry
+        </button>
+      </template>
+
     </div>
   </div>
+</div>
 
-  <script src="/static/js/app.js"></script>
-  <script>
-    function dashboardApp() {
-      return {
-        briefing: null,
-        modal: null,
-        calendar: null,
+<!-- ── Add Entry Modal ────────────────────────────────────────── -->
+<div x-show="addEntry.open" x-cloak
+     style="position:fixed;inset:0;background:rgba(0,0,0,0.36);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="addEntry.open=false">
+  <div style="background:#fff;border-radius:22px;box-shadow:0 32px 80px rgba(0,0,0,0.18);width:100%;max-width:420px;max-height:90vh;overflow-y:auto">
 
-        init() {
-          requireAuth();
-          this.initCalendar();
-        },
+    <!-- Header -->
+    <div style="padding:22px 22px 0;display:flex;justify-content:space-between;align-items:center">
+      <button x-show="addEntry.type" @click="addEntry.type=null"
+        style="background:none;border:none;cursor:pointer;font-size:14px;font-weight:500;color:#007AFF;padding:0;font-family:inherit">
+        ← Back
+      </button>
+      <span x-show="!addEntry.type"></span>
+      <button @click="addEntry.open=false"
+        style="width:30px;height:30px;border-radius:50%;background:#F0EFEC;border:none;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
 
-        initCalendar() {
-          const self = this;
-          const el = document.getElementById('calendar');
-          this.calendar = new FullCalendar.Calendar(el, {
-            initialView: 'dayGridMonth',
-            height: 'auto',
-            headerToolbar: {
-              left: 'prev,next today',
-              center: 'title',
-              right: 'dayGridMonth,dayGridWeek',
+    <!-- Title -->
+    <div style="padding:14px 24px 20px">
+      <h2 style="font-size:22px;font-weight:700;letter-spacing:-0.5px;color:#1A1917;margin:0"
+          x-text="addEntry.type ? typeLabel(addEntry.type) : 'New Entry'"></h2>
+      <p x-show="!addEntry.type" style="font-size:14px;color:#ABAAA5;margin:5px 0 0">Choose what to add</p>
+    </div>
+
+    <!-- ── Step 1: Type picker ── -->
+    <div x-show="!addEntry.type" style="padding:0 16px 28px;display:flex;flex-direction:column;gap:8px">
+      <button @click="addEntry.type='task'"
+        style="display:flex;align-items:center;gap:14px;padding:14px 16px;border:1.5px solid #EBEBEB;border-radius:16px;background:#fff;cursor:pointer;text-align:left;width:100%;transition:all .12s;font-family:inherit"
+        onmouseover="this.style.background='#F6F5F2';this.style.borderColor='#C8C7C3'"
+        onmouseout="this.style.background='#fff';this.style.borderColor='#EBEBEB'">
+        <span style="width:44px;height:44px;background:#EEF2FF;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">✅</span>
+        <div style="flex:1">
+          <p style="font-size:15px;font-weight:600;color:#1A1917;margin:0">Task</p>
+          <p style="font-size:13px;color:#ABAAA5;margin:2px 0 0">Track a to-do or reminder</p>
+        </div>
+        <span style="color:#C8C7C3;font-size:18px;font-weight:300">›</span>
+      </button>
+
+      <button @click="addEntry.type='journal'; addEntry.journalDate=todayStr()"
+        style="display:flex;align-items:center;gap:14px;padding:14px 16px;border:1.5px solid #EBEBEB;border-radius:16px;background:#fff;cursor:pointer;text-align:left;width:100%;transition:all .12s;font-family:inherit"
+        onmouseover="this.style.background='#F6F5F2';this.style.borderColor='#C8C7C3'"
+        onmouseout="this.style.background='#fff';this.style.borderColor='#EBEBEB'">
+        <span style="width:44px;height:44px;background:#ECFDF5;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📓</span>
+        <div style="flex:1">
+          <p style="font-size:15px;font-weight:600;color:#1A1917;margin:0">Journal</p>
+          <p style="font-size:13px;color:#ABAAA5;margin:2px 0 0">Write a journal entry</p>
+        </div>
+        <span style="color:#C8C7C3;font-size:18px;font-weight:300">›</span>
+      </button>
+
+      <button @click="addEntry.type='document'"
+        style="display:flex;align-items:center;gap:14px;padding:14px 16px;border:1.5px solid #EBEBEB;border-radius:16px;background:#fff;cursor:pointer;text-align:left;width:100%;transition:all .12s;font-family:inherit"
+        onmouseover="this.style.background='#F6F5F2';this.style.borderColor='#C8C7C3'"
+        onmouseout="this.style.background='#fff';this.style.borderColor='#EBEBEB'">
+        <span style="width:44px;height:44px;background:#FFFBEB;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📄</span>
+        <div style="flex:1">
+          <p style="font-size:15px;font-weight:600;color:#1A1917;margin:0">Document</p>
+          <p style="font-size:13px;color:#ABAAA5;margin:2px 0 0">Upload a file</p>
+        </div>
+        <span style="color:#C8C7C3;font-size:18px;font-weight:300">›</span>
+      </button>
+    </div>
+
+    <!-- ── Step 2a: Task form ── -->
+    <div x-show="addEntry.type==='task'" style="padding:0 16px 28px">
+      <div style="background:#F6F5F2;border-radius:16px;overflow:hidden;margin-bottom:12px">
+        <div style="padding:13px 16px">
+          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Title</p>
+          <input x-model="addEntry.taskTitle"
+            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;padding:0"
+            placeholder="What needs to be done?" />
+        </div>
+        <div style="height:1px;background:#ECEAE5"></div>
+        <div style="padding:13px 16px">
+          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Notes</p>
+          <textarea x-model="addEntry.taskDesc" rows="2"
+            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;resize:none;font-family:inherit;padding:0;line-height:1.5"
+            placeholder="Add notes…"></textarea>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px">
+          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Priority</p>
+          <select x-model="addEntry.taskPriority"
+            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;cursor:pointer;appearance:none;padding:0">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px">
+          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Due Date</p>
+          <input type="datetime-local" x-model="addEntry.taskDueDate"
+            style="width:100%;border:none;background:none;font-size:14px;color:#1A1917;outline:none;font-family:inherit;padding:0" />
+        </div>
+      </div>
+
+      <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px;margin-bottom:20px">
+        <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Tags</p>
+        <input x-model="addEntry.taskTags"
+          style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;padding:0"
+          placeholder="work, health, personal" />
+      </div>
+
+      <button @click="saveEntry()" :disabled="addEntry.saving || !addEntry.taskTitle.trim()"
+        style="width:100%;height:52px;background:#1A1917;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .12s"
+        :style="(addEntry.saving || !addEntry.taskTitle.trim()) ? 'opacity:.4;cursor:not-allowed' : 'opacity:1'">
+        <span x-text="addEntry.saving ? 'Saving…' : 'Add Task'"></span>
+      </button>
+      <button @click="addEntry.open=false"
+        style="width:100%;height:42px;background:none;border:none;font-size:14px;color:#ABAAA5;cursor:pointer;font-family:inherit;margin-top:4px">
+        Cancel
+      </button>
+    </div>
+
+    <!-- ── Step 2b: Journal form ── -->
+    <div x-show="addEntry.type==='journal'" style="padding:0 16px 28px">
+      <div style="background:#F6F5F2;border-radius:16px;overflow:hidden;margin-bottom:12px">
+        <div style="padding:13px 16px">
+          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Date</p>
+          <input type="date" x-model="addEntry.journalDate"
+            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;padding:0" />
+        </div>
+        <div style="height:1px;background:#ECEAE5"></div>
+        <div style="padding:13px 16px">
+          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Title</p>
+          <input x-model="addEntry.journalTitle"
+            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;padding:0"
+            placeholder="Give this entry a title…" />
+        </div>
+        <div style="height:1px;background:#ECEAE5"></div>
+        <div style="padding:13px 16px">
+          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Entry</p>
+          <textarea x-model="addEntry.journalContent" rows="5"
+            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;resize:none;font-family:inherit;padding:0;line-height:1.6"
+            placeholder="What's on your mind?"></textarea>
+        </div>
+      </div>
+
+      <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px;margin-bottom:20px">
+        <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Mood</p>
+        <select x-model="addEntry.journalMood"
+          style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;cursor:pointer;appearance:none;padding:0">
+          <option value="">Not set</option>
+          <option value="great">😄 Great</option>
+          <option value="good">🙂 Good</option>
+          <option value="neutral">😐 Neutral</option>
+          <option value="low">😔 Low</option>
+          <option value="stressed">😤 Stressed</option>
+        </select>
+      </div>
+
+      <button @click="saveEntry()" :disabled="addEntry.saving || !addEntry.journalContent.trim()"
+        style="width:100%;height:52px;background:#1A1917;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .12s"
+        :style="(addEntry.saving || !addEntry.journalContent.trim()) ? 'opacity:.4;cursor:not-allowed' : 'opacity:1'">
+        <span x-text="addEntry.saving ? 'Saving…' : 'Save Entry'"></span>
+      </button>
+      <button @click="addEntry.open=false"
+        style="width:100%;height:42px;background:none;border:none;font-size:14px;color:#ABAAA5;cursor:pointer;font-family:inherit;margin-top:4px">
+        Cancel
+      </button>
+    </div>
+
+    <!-- ── Step 2c: Document form ── -->
+    <div x-show="addEntry.type==='document'" style="padding:0 16px 28px">
+      <div style="border:2px dashed #DCDBD7;border-radius:16px;padding:32px 16px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:12px"
+           :style="addEntry.docFile ? 'border-color:#1A1917;border-style:solid;background:#F6F5F2' : ''"
+           @dragover.prevent @drop.prevent="addEntry.docFile=$event.dataTransfer.files[0]"
+           @click="$refs.docInput.click()">
+        <input type="file" x-ref="docInput" accept=".pdf,.docx,.txt,.md"
+               @change="addEntry.docFile=$event.target.files[0]" style="display:none" />
+        <template x-if="!addEntry.docFile">
+          <div>
+            <div style="width:52px;height:52px;background:#ECEAE5;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 12px">📁</div>
+            <p style="font-size:15px;font-weight:500;color:#1A1917;margin:0 0 5px">Drop a file here</p>
+            <p style="font-size:13px;color:#ABAAA5;margin:0">or click to browse · PDF, DOCX, TXT, MD</p>
+          </div>
+        </template>
+        <template x-if="addEntry.docFile">
+          <div>
+            <div style="width:52px;height:52px;background:#ECEAE5;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 12px">📄</div>
+            <p style="font-size:15px;font-weight:600;color:#1A1917;margin:0 0 4px" x-text="addEntry.docFile.name"></p>
+            <p style="font-size:13px;color:#ABAAA5;margin:0">Tap to change</p>
+          </div>
+        </template>
+      </div>
+
+      <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px;margin-bottom:20px">
+        <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Description</p>
+        <input x-model="addEntry.docDesc"
+          style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;padding:0"
+          placeholder="Optional…" />
+      </div>
+
+      <button @click="saveEntry()" :disabled="addEntry.saving || !addEntry.docFile"
+        style="width:100%;height:52px;background:#1A1917;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .12s"
+        :style="(addEntry.saving || !addEntry.docFile) ? 'opacity:.4;cursor:not-allowed' : 'opacity:1'">
+        <span x-text="addEntry.saving ? 'Uploading…' : 'Upload Document'"></span>
+      </button>
+      <button @click="addEntry.open=false"
+        style="width:100%;height:42px;background:none;border:none;font-size:14px;color:#ABAAA5;cursor:pointer;font-family:inherit;margin-top:4px">
+        Cancel
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+<script>
+  function dashboardApp() {
+    return {
+      briefing: null,
+      dayModal: null,
+      calendarObj: null,
+      username: '',
+      addEntry: {
+        open: false, type: null, saving: false,
+        taskTitle: '', taskDesc: '', taskPriority: 'medium', taskDueDate: '', taskTags: '',
+        journalTitle: '', journalContent: '', journalMood: '', journalDate: '',
+        docFile: null, docDesc: '',
+      },
+
+      get todayLabel() {
+        return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      },
+
+      todayStr() {
+        return new Date().toISOString().slice(0, 10);
+      },
+
+      typeLabel(t) {
+        return { task: 'New Task', journal: 'New Journal Entry', document: 'Upload Document' }[t] || '';
+      },
+
+      async init() {
+        requireAuth();
+        API.get('/users/me').then(u => { this.username = u.username || ''; }).catch(() => {});
+        this.initCalendar();
+      },
+
+      initCalendar() {
+        const self = this;
+        this.calendarObj = new FullCalendar.Calendar(document.getElementById('calendar'), {
+          initialView: 'dayGridMonth',
+          height: 'auto',
+          headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek' },
+          eventSources: [{
+            events: async (info, success, failure) => {
+              try {
+                const events = await API.get(`/calendar/events?start=${info.startStr.slice(0,10)}&end=${info.endStr.slice(0,10)}`);
+                success(events);
+              } catch(e) { failure(e); }
             },
-            eventSources: [{
-              events: async (info, success, failure) => {
-                try {
-                  const start = info.startStr.slice(0, 10);
-                  const end   = info.endStr.slice(0, 10);
-                  const events = await API.get(`/calendar/events?start=${start}&end=${end}`);
-                  success(events);
-                } catch (e) {
-                  failure(e);
-                }
-              },
-            }],
-            dateClick: (info) => self.openDayModal(info.dateStr),
-            eventClick: (info) => self.openDayModal(info.event.startStr),
-          });
-          this.calendar.render();
-        },
+          }],
+          dateClick: (info) => self.openDayModal(info.dateStr),
+          eventClick: (info) => self.openDayModal(info.event.startStr),
+        });
+        this.calendarObj.render();
+      },
 
-        async openDayModal(dateStr) {
-          try {
-            const detail = await API.get(`/calendar/day-detail?day=${dateStr}`);
-            this.modal = detail;
-          } catch (e) {
-            console.error(e);
+      async openDayModal(dateStr) {
+        try {
+          this.dayModal = await API.get(`/calendar/day-detail?day=${dateStr}`);
+        } catch(e) { console.error(e); }
+      },
+
+      async loadBriefing() {
+        try {
+          const r = await API.get('/briefing/');
+          this.briefing = r.briefing;
+        } catch(e) { alert('Failed to load briefing: ' + e.message); }
+      },
+
+      openAddEntry() {
+        this.addEntry = {
+          open: true, type: null, saving: false,
+          taskTitle: '', taskDesc: '', taskPriority: 'medium', taskDueDate: '', taskTags: '',
+          journalTitle: '', journalContent: '', journalMood: '', journalDate: this.todayStr(),
+          docFile: null, docDesc: '',
+        };
+      },
+
+      async saveEntry() {
+        this.addEntry.saving = true;
+        try {
+          if (this.addEntry.type === 'task') {
+            await API.post('/tasks/', {
+              title: this.addEntry.taskTitle.trim(),
+              description: this.addEntry.taskDesc || null,
+              priority: this.addEntry.taskPriority,
+              status: 'todo',
+              due_date: this.addEntry.taskDueDate || null,
+              tags: this.addEntry.taskTags ? this.addEntry.taskTags.split(',').map(t => t.trim()).filter(Boolean) : [],
+            });
+          } else if (this.addEntry.type === 'journal') {
+            await API.post('/journal/', {
+              title: this.addEntry.journalTitle || null,
+              content: this.addEntry.journalContent,
+              mood: this.addEntry.journalMood || null,
+              entry_date: this.addEntry.journalDate,
+              source: 'web',
+            });
+          } else if (this.addEntry.type === 'document' && this.addEntry.docFile) {
+            const fd = new FormData();
+            fd.append('file', this.addEntry.docFile);
+            fd.append('source', 'web');
+            if (this.addEntry.docDesc) fd.append('description', this.addEntry.docDesc);
+            await API.upload('/documents/', fd);
           }
-        },
+          this.addEntry.open = false;
+          this.calendarObj.refetchEvents();
+        } catch(e) {
+          alert('Failed to save: ' + e.message);
+        } finally {
+          this.addEntry.saving = false;
+        }
+      },
 
-        async loadBriefing() {
-          try {
-            const result = await API.get('/briefing/');
-            this.briefing = result.briefing;
-          } catch (e) {
-            alert('Failed to load briefing: ' + e.message);
-          }
-        },
+      statusIcon(s) {
+        return { todo: '⏳', in_progress: '🔄', done: '✅', cancelled: '❌' }[s] || '⏳';
+      },
 
-        statusIcon(status) {
-          return { todo: '⏳', in_progress: '🔄', done: '✅', cancelled: '❌' }[status] || '⏳';
-        },
-
-        logout,
-      };
-    }
-  </script>
+      logout,
+    };
+  }
+</script>
 </body>
 </html>

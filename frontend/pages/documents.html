@@ -4,187 +4,188 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Koko — Documents</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body class="bg-gray-50 min-h-screen" x-data="docsApp()" x-init="init()">
+<body x-data="docsApp()" x-init="init()">
 
-  <div class="flex h-screen overflow-hidden">
-    <!-- Sidebar -->
-    <aside class="w-56 bg-white border-r border-gray-100 flex flex-col p-4 gap-1 shrink-0">
-      <div class="text-xl font-bold text-indigo-600 mb-6 px-2">🪄 Koko</div>
+<div class="page-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
       <a href="/dashboard" class="nav-link">📅 Daily Tracker</a>
       <a href="/tasks"     class="nav-link">✅ Tasks</a>
       <a href="/documents" class="nav-link active">📄 Documents</a>
       <a href="/profile"   class="nav-link">👤 Profile</a>
-      <div class="flex-1"></div>
-      <button @click="logout()" class="nav-link text-red-500 hover:bg-red-50 hover:text-red-600">🚪 Logout</button>
-    </aside>
+    </nav>
+    <div style="flex:1"></div>
+    <button @click="logout()" class="nav-link danger" style="color:#9CA3AF">← Sign out</button>
+  </aside>
 
-    <!-- Main -->
-    <main class="flex-1 overflow-y-auto p-6">
-      <h1 class="text-2xl font-bold text-gray-900 mb-6">Documents</h1>
+  <!-- Main -->
+  <main class="page-main">
 
-      <!-- Upload area -->
-      <div class="card mb-6">
-        <h2 class="font-semibold text-gray-700 mb-3">Upload Document</h2>
-        <div class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-indigo-400 transition-colors"
-             @dragover.prevent @drop.prevent="handleDrop($event)">
-          <input type="file" id="file-input" class="hidden"
-                 accept=".pdf,.docx,.txt,.md" @change="handleFileSelect($event)" />
-          <label for="file-input" class="cursor-pointer">
-            <div class="text-3xl mb-2">📥</div>
-            <p class="text-gray-500 text-sm">Drop a file here or <span class="text-indigo-600 font-medium">browse</span></p>
-            <p class="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD supported</p>
-          </label>
-        </div>
+    <div class="page-header">
+      <h1 class="page-title">Documents</h1>
+    </div>
+
+    <!-- Upload -->
+    <div class="card" style="margin-bottom:20px">
+      <p style="font-size:14px;font-weight:600;color:#1A1917;margin-bottom:12px">Upload a Document</p>
+      <div style="border:2px dashed #D6D5D0;border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:all .12s"
+           :style="uploadFile ? 'border-color:#1A1917;background:#F6F5F2' : ''"
+           @dragover.prevent @drop.prevent="uploadFile=$event.dataTransfer.files[0]"
+           @click="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" style="display:none" accept=".pdf,.docx,.txt,.md" @change="handleFileSelect($event)" />
+        <template x-if="!uploadFile">
+          <div>
+            <p style="font-size:28px;margin-bottom:8px">📁</p>
+            <p style="font-size:14px;color:#78776E">Drop a file or <span style="color:#1A1917;font-weight:500">browse</span></p>
+            <p style="font-size:12px;color:#ABAAA5;margin-top:4px">PDF, DOCX, TXT, MD</p>
+          </div>
+        </template>
         <template x-if="uploadFile">
-          <div class="mt-3 flex items-center gap-3">
-            <span class="text-sm text-gray-700 flex-1" x-text="uploadFile.name"></span>
-            <input x-model="uploadDesc" placeholder="Description (optional)"
-              class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 flex-1 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            <button @click="uploadDocument()"
-              :disabled="uploading"
-              class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-              <span x-text="uploading ? 'Uploading…' : 'Upload'"></span>
-            </button>
+          <div>
+            <p style="font-size:14px;font-weight:500;color:#1A1917" x-text="uploadFile.name"></p>
+            <p style="font-size:12px;color:#78776E;margin-top:4px">Click to change file</p>
           </div>
         </template>
       </div>
-
-      <!-- Document list -->
-      <div class="card mb-6">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold text-gray-700">All Documents (<span x-text="docs.length"></span>)</h2>
-        </div>
-        <template x-if="docs.length === 0">
-          <p class="text-gray-400 text-sm text-center py-6">No documents yet. Upload one above.</p>
-        </template>
-        <div class="space-y-2">
-          <template x-for="doc in docs" :key="doc.id">
-            <div class="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0 group">
-              <span class="text-xl">📄</span>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-gray-800 truncate" x-text="doc.original_name"></p>
-                <p class="text-xs text-gray-400">
-                  <span x-text="fmtSize(doc.file_size)"></span> ·
-                  <span x-text="doc.source === 'telegram' ? '📱 Telegram' : '🌐 Web'"></span> ·
-                  <span x-text="fmtDate(doc.created_at)"></span>
-                  <span x-text="doc.indexed ? ' · ✅ Indexed' : ' · ⏳ Not indexed'" class="ml-1"></span>
-                </p>
-                <template x-if="doc.description">
-                  <p class="text-xs text-gray-500 truncate" x-text="doc.description"></p>
-                </template>
-              </div>
-              <button @click="deleteDoc(doc.id)"
-                class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1">🗑️</button>
-            </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- Q&A -->
-      <div class="card">
-        <h2 class="font-semibold text-gray-700 mb-3">🔍 Ask About Your Documents</h2>
-        <div class="flex gap-2">
-          <input x-model="question" @keydown.enter="askQuestion()"
-            placeholder="Ask anything about your documents…"
-            class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-          <button @click="askQuestion()" :disabled="asking"
-            class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-            <span x-text="asking ? '…' : 'Ask'"></span>
+      <template x-if="uploadFile">
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <input x-model="uploadDesc" class="input" placeholder="Description (optional)" style="flex:1" />
+          <button @click="uploadDocument()" :disabled="uploading" class="btn btn-primary">
+            <span x-text="uploading ? 'Uploading…' : 'Upload'"></span>
           </button>
+          <button @click="uploadFile=null" class="btn btn-ghost btn-sm">✕</button>
         </div>
-        <template x-if="answer">
-          <div class="mt-4 bg-indigo-50 rounded-xl p-4">
-            <p class="text-xs text-indigo-500 font-semibold mb-1">Answer</p>
-            <p class="text-sm text-gray-700 whitespace-pre-wrap" x-text="answer"></p>
+      </template>
+    </div>
+
+    <!-- Document list -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <p style="font-size:14px;font-weight:600;color:#1A1917;margin-bottom:14px">
+          Files <span style="font-weight:400;color:#78776E" x-text="'(' + docs.length + ')'"></span>
+        </p>
+      </div>
+      <template x-if="docs.length===0">
+        <p style="text-align:center;color:#ABAAA5;font-size:14px;padding:32px 0">No documents yet.</p>
+      </template>
+      <div>
+        <template x-for="doc in docs" :key="doc.id">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F3F4F6"
+               class="doc-row">
+            <span style="font-size:22px;flex-shrink:0">📄</span>
+            <div style="flex:1;min-width:0">
+              <p style="font-size:13.5px;font-weight:500;color:#1A1917;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="doc.original_name"></p>
+              <p style="font-size:12px;color:#ABAAA5;margin-top:2px">
+                <span x-text="fmtSize(doc.file_size)"></span>
+                · <span x-text="doc.source==='telegram' ? 'Telegram' : 'Web'"></span>
+                · <span x-text="fmtDate(doc.created_at)"></span>
+                · <span :style="doc.indexed ? 'color:#10B981' : 'color:#ABAAA5'" x-text="doc.indexed ? 'Indexed' : 'Not indexed'"></span>
+              </p>
+              <template x-if="doc.description">
+                <p style="font-size:12px;color:#78776E;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="doc.description"></p>
+              </template>
+            </div>
+            <button @click="deleteDoc(doc.id)" class="btn btn-ghost btn-sm doc-delete" style="color:#DC2626;opacity:0;transition:opacity .12s">🗑</button>
           </div>
         </template>
       </div>
-    </main>
-  </div>
+    </div>
 
-  <script src="/static/js/app.js"></script>
-  <script>
-    function docsApp() {
-      return {
-        docs: [],
-        uploadFile: null,
-        uploadDesc: '',
-        uploading: false,
-        question: '',
-        answer: null,
-        asking: false,
+    <!-- Q&A -->
+    <div class="card">
+      <p style="font-size:14px;font-weight:600;color:#1A1917;margin-bottom:12px">Ask About Your Documents</p>
+      <div style="display:flex;gap:8px">
+        <input x-model="question" @keydown.enter="askQuestion()" class="input"
+               placeholder="Ask anything about your documents…" />
+        <button @click="askQuestion()" :disabled="asking" class="btn btn-primary" style="flex-shrink:0">
+          <span x-text="asking ? '…' : 'Ask'"></span>
+        </button>
+      </div>
+      <template x-if="answer">
+        <div style="margin-top:16px;background:#F6F5F2;border:1px solid #E8E7E3;border-radius:10px;padding:16px">
+          <p style="font-size:12px;font-weight:600;color:#78776E;margin-bottom:6px">Answer</p>
+          <p style="font-size:13.5px;color:#1A1917;line-height:1.7;white-space:pre-wrap" x-text="answer"></p>
+        </div>
+      </template>
+    </div>
 
-        async init() {
-          requireAuth();
+  </main>
+</div>
+
+<style>
+  .doc-row:hover .doc-delete { opacity: 1 !important; }
+  .doc-row:last-child { border-bottom: none; }
+</style>
+
+<script src="/static/js/app.js"></script>
+<script>
+  function docsApp() {
+    return {
+      username: '',
+      docs: [], uploadFile: null, uploadDesc: '', uploading: false,
+      question: '', answer: null, asking: false,
+
+      async init() {
+        requireAuth();
+        API.get('/users/me').then(u => { this.username = u.username || ''; }).catch(() => {});
+        await this.loadDocs();
+      },
+      async loadDocs() { this.docs = await API.get('/documents/'); },
+
+      handleFileSelect(e) { this.uploadFile = e.target.files[0] || null; },
+
+      async uploadDocument() {
+        if (!this.uploadFile || this.uploading) return;
+        this.uploading = true;
+        try {
+          const fd = new FormData();
+          fd.append('file', this.uploadFile);
+          fd.append('source', 'web');
+          if (this.uploadDesc) fd.append('description', this.uploadDesc);
+          await API.upload('/documents/', fd);
+          this.uploadFile = null;
+          this.uploadDesc = '';
+          document.getElementById('file-input').value = '';
           await this.loadDocs();
-        },
+        } catch(e) { alert('Upload failed: ' + e.message); }
+        finally { this.uploading = false; }
+      },
 
-        async loadDocs() {
-          this.docs = await API.get('/documents/');
-        },
+      async deleteDoc(id) {
+        if (!confirm('Delete this document?')) return;
+        await API.delete(`/documents/${id}`);
+        await this.loadDocs();
+      },
 
-        handleFileSelect(e) {
-          this.uploadFile = e.target.files[0] || null;
-        },
+      async askQuestion() {
+        if (!this.question.trim() || this.asking) return;
+        this.asking = true; this.answer = null;
+        try {
+          const r = await API.post('/documents/qa', { question: this.question });
+          this.answer = r.answer;
+        } catch(e) { this.answer = 'Error: ' + e.message; }
+        finally { this.asking = false; }
+      },
 
-        handleDrop(e) {
-          this.uploadFile = e.dataTransfer.files[0] || null;
-        },
+      fmtSize(bytes) {
+        if (!bytes) return '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+        return (bytes/1048576).toFixed(1) + ' MB';
+      },
 
-        async uploadDocument() {
-          if (!this.uploadFile || this.uploading) return;
-          this.uploading = true;
-          try {
-            const fd = new FormData();
-            fd.append('file', this.uploadFile);
-            fd.append('source', 'web');
-            if (this.uploadDesc) fd.append('description', this.uploadDesc);
-            await API.upload('/documents/', fd);
-            this.uploadFile = null;
-            this.uploadDesc = '';
-            document.getElementById('file-input').value = '';
-            await this.loadDocs();
-          } catch (e) {
-            alert('Upload failed: ' + e.message);
-          } finally {
-            this.uploading = false;
-          }
-        },
-
-        async deleteDoc(id) {
-          if (!confirm('Delete this document?')) return;
-          await API.delete(`/documents/${id}`);
-          await this.loadDocs();
-        },
-
-        async askQuestion() {
-          if (!this.question.trim() || this.asking) return;
-          this.asking = true;
-          this.answer = null;
-          try {
-            const result = await API.post('/documents/qa', { question: this.question });
-            this.answer = result.answer;
-          } catch (e) {
-            this.answer = 'Error: ' + e.message;
-          } finally {
-            this.asking = false;
-          }
-        },
-
-        fmtSize(bytes) {
-          if (!bytes) return '';
-          if (bytes < 1024) return bytes + ' B';
-          if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-          return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-        },
-
-        fmtDate, logout,
-      };
-    }
-  </script>
+      fmtDate, logout,
+    };
+  }
+</script>
 </body>
 </html>

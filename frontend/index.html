@@ -3,33 +3,81 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Koko — Login</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Koko</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #F6F5F2;
+    }
+    .login-card {
+      background: #fff;
+      border: 1px solid #E8E7E3;
+      border-radius: 20px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 360px;
+      text-align: center;
+      box-shadow: 0 2px 24px rgba(0,0,0,0.06);
+    }
+    .login-wordmark {
+      font-size: 22px;
+      font-weight: 600;
+      color: #1A1917;
+      letter-spacing: -0.4px;
+      margin-bottom: 6px;
+    }
+    .login-tagline {
+      font-size: 14px;
+      color: #78776E;
+      margin-bottom: 32px;
+    }
+    .login-footer {
+      font-size: 12px;
+      color: #ABAAA5;
+      margin-top: 24px;
+      line-height: 1.6;
+    }
+    .login-error {
+      margin-top: 16px;
+      font-size: 13px;
+      color: #DC2626;
+      background: #FEF2F2;
+      border: 1px solid #FCA5A5;
+      border-radius: 8px;
+      padding: 9px 12px;
+    }
+    #telegram-login-wrap { display: flex; justify-content: center; }
+  </style>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
+<body>
+  <div x-data="loginPage()" x-init="init()">
+    <div class="login-card">
+      <div class="login-wordmark">Koko</div>
+      <p class="login-tagline">Your personal life assistant</p>
 
-  <div class="w-full max-w-sm" x-data="loginPage()" x-init="init()">
-    <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
-      <div class="text-5xl mb-3">🪄</div>
-      <h1 class="text-2xl font-bold text-gray-900 mb-1">Koko</h1>
-      <p class="text-gray-500 text-sm mb-8">Your personal life assistant</p>
+      <div id="telegram-login-wrap"></div>
 
-      <!-- Telegram Login Widget injected here -->
-      <div id="telegram-login-wrap" class="flex justify-center mb-4"></div>
-
-      <p class="text-xs text-gray-400">
-        Sign in with Telegram to get started.<br/>Your data is stored privately on your server.
+      <p class="login-footer">
+        Sign in with Telegram to continue.<br />
+        Your data is stored privately on your server.
       </p>
 
       <template x-if="error">
-        <p class="mt-4 text-sm text-red-500" x-text="error"></p>
+        <p class="login-error" x-text="error"></p>
       </template>
     </div>
   </div>
 
   <script>
-    // Called by Telegram widget
     async function onTelegramAuth(user) {
       try {
         const resp = await fetch('/api/auth/telegram', {
@@ -42,7 +90,8 @@
         localStorage.setItem('koko_token', data.token);
         window.location.href = '/dashboard';
       } catch (e) {
-        document.querySelector('[x-data]').__x.$data.error = 'Login failed. Please try again.';
+        const el = document.querySelector('[x-data]');
+        if (el && el._x_dataStack) el._x_dataStack[0].error = 'Login failed. Please try again.';
       }
     }
 
@@ -50,27 +99,24 @@
       return {
         error: null,
         async init() {
-          // Redirect if already logged in
           if (localStorage.getItem('koko_token')) {
             window.location.href = '/dashboard';
             return;
           }
-          // Load bot username from config then inject widget
           try {
             const cfg = await fetch('/api/config').then(r => r.json());
-            const botUsername = cfg.telegram_bot_username;
-            if (!botUsername) {
+            if (!cfg.telegram_bot_username) {
               this.error = 'TELEGRAM_BOT_USERNAME not configured on server.';
               return;
             }
-            const script = document.createElement('script');
-            script.async = true;
-            script.src = 'https://telegram.org/js/telegram-widget.js?22';
-            script.setAttribute('data-telegram-login', botUsername);
-            script.setAttribute('data-size', 'large');
-            script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-            script.setAttribute('data-request-access', 'write');
-            document.getElementById('telegram-login-wrap').appendChild(script);
+            const s = document.createElement('script');
+            s.async = true;
+            s.src = 'https://telegram.org/js/telegram-widget.js?22';
+            s.setAttribute('data-telegram-login', cfg.telegram_bot_username);
+            s.setAttribute('data-size', 'large');
+            s.setAttribute('data-onauth', 'onTelegramAuth(user)');
+            s.setAttribute('data-request-access', 'write');
+            document.getElementById('telegram-login-wrap').appendChild(s);
           } catch (e) {
             this.error = 'Could not reach server.';
           }
