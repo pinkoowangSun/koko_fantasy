@@ -21,6 +21,14 @@ PRIORITY_COLOR = {
     "low": "#6b7280",
 }
 
+MOOD_EMOJI = {
+    "great": "😄",
+    "good": "🙂",
+    "neutral": "😐",
+    "low": "😔",
+    "stressed": "😤",
+}
+
 
 @router.get("/events")
 async def get_events(
@@ -60,13 +68,16 @@ async def get_events(
         )
     )).scalars().all()
     for j in journal:
+        mood_icon = MOOD_EMOJI.get(j.mood, "") if j.mood else ""
+        base_title = j.title or "Journal"
+        event_title = f"{mood_icon} {base_title}".strip() if mood_icon else f"📓 {base_title}"
         events.append({
             "id": f"journal-{j.id}",
-            "title": j.title or "📓 Journal",
+            "title": event_title,
             "start": j.entry_date.isoformat(),
             "backgroundColor": "#10b981",
             "borderColor": "#10b981",
-            "extendedProps": {"type": "journal", "ref_id": j.id},
+            "extendedProps": {"type": "journal", "ref_id": j.id, "mood": j.mood},
         })
 
     # Documents uploaded in range
@@ -135,6 +146,7 @@ async def get_day_detail(
                 "content": j.content,
                 "content_html": j.content_html,
                 "mood": j.mood,
+                "mood_icon": MOOD_EMOJI.get(j.mood, "") if j.mood else "",
                 "source": j.source,
             }
             for j in journal
