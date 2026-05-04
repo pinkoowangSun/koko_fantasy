@@ -17,7 +17,8 @@ from app.models.memory import MemoryItem
 from app.models.reminder import Reminder
 from app.models.task import Task
 from app.models.user import User
-from app.services.ai_service import detect_intent, generate_briefing
+from app.models.workout import WorkoutLog, WorkoutPlan
+from app.services.ai_service import detect_intent, generate_briefing, parse_workout_log, generate_workout_plan
 from app.services.rag_service import extract_text, index_document, query_and_answer
 
 router = APIRouter(prefix="/bot", tags=["bot"])
@@ -308,3 +309,145 @@ async def bot_add_memory(body: BotMemoryCreate, db: AsyncSession = Depends(get_d
     db.add(item)
     await db.commit()
     return {"ok": True}
+
+
+# ── Workout ───────────────────────────────────────────────────────────────────
+
+def _week_start(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+class BotWorkoutLog(BaseModel):
+    telegram_id: int
+    raw_text: str
+    log_date: Optional[str] = None  # ISO date
+
+
+@router.post("/workout/log", dependencies=[Depends(_bot_auth)])
+async def bot_log_workout(body: BotWorkoutLog, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+
+    log_date = date.today()
+    if body.log_date:
+        try:
+            log_date = date.fromisoformat(body.log_date)
+        except ValueError:
+            pass
+
+    parsed = await parse_workout_log(user.id, body.raw_text)
+    log = WorkoutLog(
+        user_id=user.id,
+        log_date=log_date,
+        raw_text=body.raw_text,
+        category=parsed.get("category"),
+        summary=parsed.get("summary"),
+        source="telegram",
+    )
+    db.add(log)
+    await db.commit()
+    return {
+        "ok": True,
+        "category": log.category,
+        "summary": log.summary,
+    }
+
+
+@router.get("/workout/today", dependencies=[Depends(_bot_auth)])
+async def bot_workout_today(telegram_id: int, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(telegram_id, db)
+    today = date.today()
+    ws = _week_start(today)
+    day_name = today.strftime("%A").lower()
+
+    plan_row = (await db.execute(
+        select(WorkoutPlan).where(
+            WorkoutPlan.user_id == user.id,
+            WorkoutPlan.week_start == ws,
+        )
+    )).scalar_one_or_none()
+
+    if not plan_row:
+        return {"message": "No workout plan for this week yet. Use /genplan to create one with AI!"}
+
+    day_plan = plan_row.plan.get(day_name)
+    if not day_plan:
+        return {"message": "No plan found for today."}
+
+    focus = day_plan.get("focus", "Workout")
+    exercises = day_plan.get("exercises") or []
+    duration = day_plan.get("duration_min", 0)
+    warmup = day_plan.get("warmup", "")
+    notes = day_plan.get("notes", "")
+
+    if not exercises or "rest" in focus.lower():
+        msg = f"🛋 Today is a rest day — *{focus}*\n💡 {notes}" if notes else f"🛋 Today is a rest day — *{focus}*"
+    else:
+        lines = [f"🏋 Today's workout — *{focus}*"]
+        if warmup:
+            lines.append(f"🔥 Warm-up: {warmup}")
+        for ex in exercises:
+            sets = ex.get("sets", "")
+            reps = ex.get("reps", "")
+            weight = ex.get("weight", "")
+            detail = f"{sets}×{reps}" if sets and reps else reps or sets
+            weight_str = f" @ {weight}" if weight and weight not in ("bodyweight", "") else (" (bodyweight)" if weight == "bodyweight" else "")
+            lines.append(f"  • {ex.get('name', '')}: {detail}{weight_str}")
+        if duration:
+            lines.append(f"⏱ ~{duration} min")
+        if notes:
+            lines.append(f"📝 {notes}")
+        msg = "\n".join(lines)
+
+    return {"message": msg}
+
+
+class BotGeneratePlan(BaseModel):
+    telegram_id: int
+
+
+@router.post("/workout/plan/generate", dependencies=[Depends(_bot_auth)])
+async def bot_generate_plan(body: BotGeneratePlan, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+
+    four_weeks_ago = date.today() - timedelta(weeks=4)
+    logs = (await db.execute(
+        select(WorkoutLog)
+        .where(WorkoutLog.user_id == user.id, WorkoutLog.log_date >= four_weeks_ago)
+        .order_by(WorkoutLog.log_date.asc())
+    )).scalars().all()
+
+    logs_context = "\n".join(
+        f"[{l.log_date}] {l.category or 'unknown'}: {l.raw_text}" for l in logs
+    ) if logs else ""
+
+    memory_items = (await db.execute(
+        select(MemoryItem).where(MemoryItem.user_id == user.id).limit(20)
+    )).scalars().all()
+    workout_pref = next((m.value for m in memory_items if m.key.strip().lower() == "workout"), "")
+    user_memory = "; ".join(f"{m.key}: {m.value}" for m in memory_items if m.key.strip().lower() != "workout")
+
+    result = await generate_workout_plan(user.id, logs_context, user_memory, workout_pref)
+
+    ws = _week_start(date.today())
+    existing = (await db.execute(
+        select(WorkoutPlan).where(
+            WorkoutPlan.user_id == user.id,
+            WorkoutPlan.week_start == ws,
+        )
+    )).scalar_one_or_none()
+
+    if existing:
+        existing.plan = result.get("plan", {})
+        existing.ai_notes = result.get("notes")
+        existing.generated_at = datetime.utcnow()
+    else:
+        existing = WorkoutPlan(
+            user_id=user.id,
+            week_start=ws,
+            plan=result.get("plan", {}),
+            ai_notes=result.get("notes"),
+        )
+        db.add(existing)
+
+    await db.commit()
+    return {"ok": True, "notes": result.get("notes", "")}

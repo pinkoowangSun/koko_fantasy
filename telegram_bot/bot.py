@@ -9,6 +9,7 @@ from telegram_bot.handlers.journal import handle_journal
 from telegram_bot.handlers.search import handle_search
 from telegram_bot.handlers.start import handle_help, handle_start
 from telegram_bot.handlers.tasks import handle_done, handle_tasks
+from telegram_bot.handlers.workout import handle_genplan, handle_logworkout, handle_workout
 
 
 def main():
@@ -21,6 +22,9 @@ def main():
     app.add_handler(CommandHandler("done", handle_done))
     app.add_handler(CommandHandler("journal", handle_journal))
     app.add_handler(CommandHandler("search", handle_search))
+    app.add_handler(CommandHandler("workout", handle_workout))
+    app.add_handler(CommandHandler("logworkout", handle_logworkout))
+    app.add_handler(CommandHandler("genplan", handle_genplan))
 
     # File uploads
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))

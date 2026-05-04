@@ -21,6 +21,7 @@
     <nav style="display:flex;flex-direction:column;gap:2px">
       <a href="/dashboard" class="nav-link">📅 Daily Tracker</a>
       <a href="/tasks"     class="nav-link">✅ Tasks</a>
+      <a href="/workout"   class="nav-link">🏋️ Workout</a>
       <a href="/documents" class="nav-link">📄 Documents</a>
       <a href="/profile"   class="nav-link active">👤 Profile</a>
     </nav>
@@ -110,14 +111,45 @@
 
       <div>
         <template x-for="item in memory" :key="item.id">
-          <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #F3F4F6"
-               class="memory-row">
-            <span style="font-size:11px;background:#F0EFE9;color:#78776E;padding:2px 8px;border-radius:999px;font-weight:500;margin-top:1px;flex-shrink:0" x-text="item.category"></span>
-            <div style="flex:1;min-width:0">
-              <span style="font-size:13.5px;font-weight:500;color:#1A1917" x-text="item.key + ': '"></span>
-              <span style="font-size:13.5px;color:#78776E" x-text="item.value"></span>
-            </div>
-            <button @click="deleteMemory(item.id)" class="btn btn-ghost btn-sm memory-delete" style="color:#DC2626;opacity:0;transition:opacity .12s;padding:3px 7px;flex-shrink:0">🗑</button>
+          <div style="padding:10px 0;border-bottom:1px solid #F3F4F6" class="memory-row">
+
+            <!-- View mode -->
+            <template x-if="editingId !== item.id">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <span style="font-size:11px;background:#F0EFE9;color:#78776E;padding:2px 8px;border-radius:999px;font-weight:500;margin-top:2px;flex-shrink:0" x-text="item.category"></span>
+                <div style="flex:1;min-width:0">
+                  <span style="font-size:13.5px;font-weight:500;color:#1A1917" x-text="item.key + ': '"></span>
+                  <span style="font-size:13.5px;color:#78776E" x-text="item.value"></span>
+                </div>
+                <div style="display:flex;gap:4px;flex-shrink:0" class="memory-actions">
+                  <button @click="startEdit(item)" class="btn btn-ghost btn-sm" style="color:#78776E;padding:3px 7px" title="Edit">✏️</button>
+                  <button @click="deleteMemory(item.id)" class="btn btn-ghost btn-sm" style="color:#DC2626;padding:3px 7px" title="Delete">🗑</button>
+                </div>
+              </div>
+            </template>
+
+            <!-- Edit mode -->
+            <template x-if="editingId === item.id">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <input x-model="editDraft.key" class="input" placeholder="Key" style="flex:1;min-width:120px" />
+                  <select x-model="editDraft.category" class="input" style="width:120px">
+                    <option value="general">general</option>
+                    <option value="preference">preference</option>
+                    <option value="fact">fact</option>
+                    <option value="note">note</option>
+                  </select>
+                </div>
+                <textarea x-model="editDraft.value" class="input" rows="2" placeholder="Value" style="resize:vertical"></textarea>
+                <div style="display:flex;gap:6px;justify-content:flex-end">
+                  <button @click="cancelEdit()" class="btn btn-secondary btn-sm">Cancel</button>
+                  <button @click="saveEdit(item.id)" :disabled="savingEdit" class="btn btn-primary btn-sm">
+                    <span x-text="savingEdit ? 'Saving…' : 'Save'"></span>
+                  </button>
+                </div>
+              </div>
+            </template>
+
           </div>
         </template>
       </div>
@@ -160,8 +192,9 @@
 </div>
 
 <style>
-  .memory-row:hover .memory-delete { opacity: 1 !important; }
   .memory-row:last-child { border-bottom: none; }
+  .memory-actions { opacity: 0; transition: opacity .12s; }
+  .memory-row:hover .memory-actions { opacity: 1; }
 </style>
 
 <script src="/static/js/app.js"></script>
@@ -170,7 +203,8 @@
     return {
       user: {}, profile: { timezone: 'UTC' },
       editablePrefs: {}, newPrefKey: '', newPrefVal: '',
-      memory: [], saving: false,
+      memory: [], saving: false, savingEdit: false,
+      editingId: null, editDraft: { key: '', value: '', category: 'general' },
       memForm: { open: false, key: '', value: '', category: 'general' },
 
       async init() {
@@ -214,9 +248,34 @@
         await this.loadMemory();
       },
 
+      startEdit(item) {
+        this.editingId = item.id;
+        this.editDraft = { key: item.key, value: item.value, category: item.category };
+      },
+
+      cancelEdit() {
+        this.editingId = null;
+      },
+
+      async saveEdit(id) {
+        if (!this.editDraft.key.trim() || !this.editDraft.value.trim()) return;
+        this.savingEdit = true;
+        try {
+          await API.patch(`/memory/${id}`, {
+            key: this.editDraft.key.trim(),
+            value: this.editDraft.value.trim(),
+            category: this.editDraft.category,
+          });
+          this.editingId = null;
+          await this.loadMemory();
+        } catch(e) { alert(e.message); }
+        this.savingEdit = false;
+      },
+
       async deleteMemory(id) {
         if (!confirm('Remove this memory?')) return;
         await API.delete(`/memory/${id}`);
+        if (this.editingId === id) this.editingId = null;
         await this.loadMemory();
       },
 

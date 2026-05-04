@@ -88,5 +88,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             await update.message.reply_text(response_text or "Saved to memory!")
 
+    elif intent == "log_workout":
+        try:
+            result = await api("post", "/workout/log", json={
+                "telegram_id": user.id,
+                "raw_text": data.get("raw_text", text),
+                "log_date": data.get("log_date"),
+            })
+            cat = (result.get("category") or "workout").replace("_", " ").title()
+            summary = result.get("summary", "")
+            msg = f"💪 Workout logged! ({cat})"
+            if summary:
+                msg += f"\n_{summary}_"
+            await update.message.reply_text(msg, parse_mode="Markdown")
+        except Exception:
+            await update.message.reply_text(response_text or "Workout saved!")
+
+    elif intent == "view_workout_plan":
+        try:
+            result = await api("get", f"/workout/today?telegram_id={user.id}")
+            await update.message.reply_text(result.get("message", "No plan found."), parse_mode="Markdown")
+        except Exception as exc:
+            await update.message.reply_text(f"Couldn't fetch workout plan: {exc}")
+
+    elif intent == "generate_workout_plan":
+        await update.message.reply_text("🤖 Generating your personalised workout plan… one moment.")
+        try:
+            result = await api("post", "/workout/plan/generate", json={"telegram_id": user.id})
+            notes = result.get("notes", "")
+            msg = "💪 Your weekly workout plan is ready! Open the app to see the full schedule."
+            if notes:
+                msg += f"\n\n📋 _{notes}_"
+            await update.message.reply_text(msg, parse_mode="Markdown")
+        except Exception as exc:
+            await update.message.reply_text(f"Couldn't generate plan: {exc}")
+
     else:
         await update.message.reply_text(response_text or "I'm not sure how to help with that.")

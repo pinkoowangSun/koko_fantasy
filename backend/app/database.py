@@ -23,6 +23,6 @@ async def get_db():
 
 async def init_db():
     # Import all models so Base knows about them
-    from app.models import user, task, journal, document, memory, reminder, chat_history  # noqa
+    from app.models import user, task, journal, document, memory, reminder, chat_history, workout  # noqa
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
