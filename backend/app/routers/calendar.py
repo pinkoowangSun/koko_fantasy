@@ -1,8 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -154,5 +154,51 @@ async def get_day_detail(
         "documents": [
             {"id": d.id, "original_name": d.original_name, "source": d.source}
             for d in docs
+        ],
+    }
+
+
+@router.get("/today")
+async def get_today_summary(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    uid = current_user.id
+    today = date.today()
+    today_str = today.isoformat()
+
+    tasks = (await db.execute(
+        select(Task).where(
+            Task.user_id == uid,
+            Task.status.notin_(["done", "cancelled"]),
+            or_(
+                and_(Task.due_date >= today_str, Task.due_date <= today_str + " 23:59:59"),
+                and_(Task.due_date.is_(None), func.date(Task.created_at) == today_str),
+            ),
+        ).order_by(Task.created_at.desc())
+    )).scalars().all()
+
+    journal = (await db.execute(
+        select(JournalEntry).where(
+            JournalEntry.user_id == uid,
+            JournalEntry.entry_date == today,
+        ).order_by(JournalEntry.created_at.desc())
+    )).scalars().all()
+
+    return {
+        "date": today_str,
+        "tasks": [
+            {"id": t.id, "title": t.title, "status": t.status, "priority": t.priority}
+            for t in tasks
+        ],
+        "journal": [
+            {
+                "id": j.id,
+                "title": j.title,
+                "mood": j.mood,
+                "mood_icon": MOOD_EMOJI.get(j.mood, "") if j.mood else "",
+                "source": j.source,
+            }
+            for j in journal
         ],
     }

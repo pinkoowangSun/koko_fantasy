@@ -68,6 +68,47 @@
       </div>
     </template>
 
+    <!-- Today's Preview -->
+    <template x-if="todaySummary && (todaySummary.tasks.length || todaySummary.journal.length)">
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px;font-weight:600;color:#1A1917">Today</span>
+            <span style="font-size:11px;background:#F0EFEC;color:#78776E;padding:2px 8px;border-radius:999px;font-weight:500"
+                  x-text="(todaySummary.tasks.length + todaySummary.journal.length) + ' item' + ((todaySummary.tasks.length + todaySummary.journal.length) === 1 ? '' : 's')"></span>
+          </div>
+          <button @click="openDayModal(todaySummary.date)"
+            style="font-size:12.5px;color:#ABAAA5;background:none;border:none;cursor:pointer;font-family:inherit">
+            See all →
+          </button>
+        </div>
+
+        <template x-for="j in todaySummary.journal" :key="'tj'+j.id">
+          <div @click="openDayModal(todaySummary.date)"
+               style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
+            <span style="font-size:15px;flex-shrink:0" x-text="j.mood_icon || '📓'"></span>
+            <span style="flex:1;font-size:14px;color:#1A1917;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                  x-text="j.title || 'Journal entry'"></span>
+            <template x-if="j.source === 'telegram'">
+              <span style="font-size:11px;color:#ABAAA5;background:#F0EFEC;padding:2px 6px;border-radius:6px;flex-shrink:0">TG</span>
+            </template>
+            <span style="width:7px;height:7px;border-radius:50%;background:#10B981;flex-shrink:0"></span>
+          </div>
+        </template>
+
+        <template x-for="t in todaySummary.tasks" :key="'tt'+t.id">
+          <div @click="openDayModal(todaySummary.date)"
+               style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
+            <span style="font-size:15px;flex-shrink:0" x-text="statusIcon(t.status)"></span>
+            <span style="flex:1;font-size:14px;color:#1A1917;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                  x-text="t.title"></span>
+            <span style="width:7px;height:7px;border-radius:50%;flex-shrink:0"
+                  :style="'background:' + priorityColor(t.priority)"></span>
+          </div>
+        </template>
+      </div>
+    </template>
+
     <!-- Calendar -->
     <div class="card" style="margin-bottom:20px">
       <div id="calendar"></div>
@@ -420,6 +461,7 @@
     return {
       briefing: null,
       dayModal: null,
+      todaySummary: null,
       calendarObj: null,
       username: '',
       addEntry: {
@@ -445,6 +487,13 @@
         requireAuth();
         API.get('/users/me').then(u => { this.username = u.username || ''; }).catch(() => {});
         this.initCalendar();
+        this.loadTodaySummary();
+      },
+
+      async loadTodaySummary() {
+        try {
+          this.todaySummary = await API.get('/calendar/today');
+        } catch(e) { console.error(e); }
       },
 
       initCalendar() {
@@ -518,11 +567,16 @@
           }
           this.addEntry.open = false;
           this.calendarObj.refetchEvents();
+          this.loadTodaySummary();
         } catch(e) {
           alert('Failed to save: ' + e.message);
         } finally {
           this.addEntry.saving = false;
         }
+      },
+
+      priorityColor(p) {
+        return { urgent: '#ef4444', high: '#f97316', medium: '#3b82f6', low: '#6b7280' }[p] || '#3b82f6';
       },
 
       statusIcon(s) {
@@ -549,6 +603,7 @@
             if (hasItems) this.dayModal = updated;
           }
           this.calendarObj.refetchEvents();
+          this.loadTodaySummary();
         } catch(e) { alert('Delete failed: ' + e.message); }
       },
 
