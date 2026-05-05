@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.memory import MemoryItem
 from app.models.user import User
-from app.routers.auth import get_current_user
+from app.routers.auth import require_approved
 from app.schemas.memory import MemoryCreate, MemoryResponse, MemoryUpdate
 
 router = APIRouter(prefix="/memory", tags=["memory"])
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 @router.get("/", response_model=List[MemoryResponse])
 async def list_memory(
     category: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     q = select(MemoryItem).where(MemoryItem.user_id == current_user.id)
@@ -29,7 +29,7 @@ async def list_memory(
 @router.post("/", response_model=MemoryResponse, status_code=201)
 async def create_memory(
     body: MemoryCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     item = MemoryItem(user_id=current_user.id, **body.model_dump())
@@ -43,7 +43,7 @@ async def create_memory(
 async def update_memory(
     item_id: int,
     body: MemoryUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -63,7 +63,7 @@ async def update_memory(
 @router.delete("/{item_id}", status_code=204)
 async def delete_memory(
     item_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

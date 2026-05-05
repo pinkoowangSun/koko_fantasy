@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.journal import JournalEntry
 from app.models.user import User
-from app.routers.auth import get_current_user
+from app.routers.auth import require_approved
 from app.schemas.journal import JournalCreate, JournalResponse, JournalUpdate
 
 router = APIRouter(prefix="/journal", tags=["journal"])
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/journal", tags=["journal"])
 async def list_entries(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     q = select(JournalEntry).where(JournalEntry.user_id == current_user.id)
@@ -33,7 +33,7 @@ async def list_entries(
 @router.post("/", response_model=JournalResponse, status_code=201)
 async def create_entry(
     body: JournalCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     entry = JournalEntry(user_id=current_user.id, **body.model_dump())
@@ -46,7 +46,7 @@ async def create_entry(
 @router.get("/{entry_id}", response_model=JournalResponse)
 async def get_entry(
     entry_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -62,7 +62,7 @@ async def get_entry(
 async def update_entry(
     entry_id: int,
     body: JournalUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -83,7 +83,7 @@ async def update_entry(
 @router.delete("/{entry_id}", status_code=204)
 async def delete_entry(
     entry_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

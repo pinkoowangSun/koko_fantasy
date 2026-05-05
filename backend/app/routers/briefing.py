@@ -9,7 +9,7 @@ from app.models.journal import JournalEntry
 from app.models.reminder import Reminder
 from app.models.task import Task
 from app.models.user import User
-from app.routers.auth import get_current_user
+from app.routers.auth import require_approved
 from app.services.ai_service import generate_briefing
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/briefing", tags=["briefing"])
 
 @router.get("/")
 async def get_briefing(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     today = date.today()

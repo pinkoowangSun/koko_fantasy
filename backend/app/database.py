@@ -24,5 +24,16 @@ async def get_db():
 async def init_db():
     # Import all models so Base knows about them
     from app.models import user, task, journal, document, memory, reminder, chat_history, workout  # noqa
+    from sqlalchemy import text
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Column migrations for existing databases
+        for sql in [
+            "ALTER TABLE users ADD COLUMN status VARCHAR DEFAULT 'approved'",
+            "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN notified_admin BOOLEAN DEFAULT 0",
+        ]:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass  # column already exists

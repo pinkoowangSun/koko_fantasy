@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.memory import MemoryItem
 from app.models.user import User
 from app.models.workout import WorkoutExercise, WorkoutLog, WorkoutPlan
-from app.routers.auth import get_current_user
+from app.routers.auth import require_approved
 from app.schemas.workout import (
     WorkoutExerciseCreate,
     WorkoutExerciseOut,
@@ -32,7 +32,7 @@ def _week_start(d: date) -> date:
 @router.get("/logs", response_model=list[WorkoutLogOut])
 async def list_logs(
     limit: int = 50,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     logs = (await db.execute(
@@ -48,7 +48,7 @@ async def list_logs(
 @router.post("/logs", response_model=WorkoutLogOut)
 async def create_log(
     body: WorkoutLogCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     parsed = await parse_workout_log(current_user.id, body.raw_text)
@@ -74,7 +74,7 @@ async def create_log(
 async def update_log(
     log_id: int,
     body: WorkoutLogUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     log = (await db.execute(
@@ -104,7 +104,7 @@ async def update_log(
 @router.delete("/logs/{log_id}", status_code=204)
 async def delete_log(
     log_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     log = (await db.execute(
@@ -123,7 +123,7 @@ async def delete_log(
 async def delete_exercise(
     log_id: int,
     exercise_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     ex = (await db.execute(
@@ -145,7 +145,7 @@ async def delete_exercise(
 async def add_exercise(
     log_id: int,
     body: WorkoutExerciseCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     log = (await db.execute(
@@ -166,7 +166,7 @@ async def add_exercise(
 
 @router.get("/plan", response_model=Optional[WorkoutPlanOut])
 async def get_plan(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     ws = _week_start(date.today())
@@ -181,7 +181,7 @@ async def get_plan(
 
 @router.post("/plan/generate", response_model=WorkoutPlanOut)
 async def generate_plan(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     four_weeks_ago = date.today() - timedelta(weeks=4)
@@ -256,7 +256,7 @@ async def generate_plan(
 
 @router.get("/insights", response_model=WorkoutInsightsOut)
 async def get_insights(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     eight_weeks_ago = date.today() - timedelta(weeks=8)

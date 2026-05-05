@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.document import Document
 from app.models.user import User
-from app.routers.auth import get_current_user
+from app.routers.auth import require_approved
 from app.schemas.document import DocumentQARequest, DocumentResponse
 from app.services.rag_service import extract_text, index_document, query_and_answer
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 @router.get("/", response_model=List[DocumentResponse])
 async def list_documents(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -35,7 +35,7 @@ async def upload_document(
     file: UploadFile = File(...),
     description: Optional[str] = Form(None),
     source: str = Form("web"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     user_dir = settings.DOCUMENTS_DIR / str(current_user.id)
@@ -80,7 +80,7 @@ async def upload_document(
 @router.get("/{doc_id}", response_model=DocumentResponse)
 async def get_document(
     doc_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -95,7 +95,7 @@ async def get_document(
 @router.delete("/{doc_id}", status_code=204)
 async def delete_document(
     doc_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -112,7 +112,7 @@ async def delete_document(
 @router.post("/qa")
 async def document_qa(
     body: DocumentQARequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
 ):
     answer = await query_and_answer(current_user.id, body.question, body.document_id)
     return {"answer": answer}

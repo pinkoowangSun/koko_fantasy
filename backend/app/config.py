@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     DOCUMENTS_DIR: Path = BASE_DIR / "data" / "documents"
     VECTORS_DIR: Path = BASE_DIR / "data" / "vectors"
 
+    # Super admin
+    SUPER_ADMIN_TELEGRAM_ID: int = 5429764884
+
     # Server
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000

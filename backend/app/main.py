@@ -72,3 +72,7 @@ if FRONTEND_DIR.exists():
     @app.get("/workout")
     async def serve_workout():
         return FileResponse(str(FRONTEND_DIR / "pages" / "workout.html"))
+
+    @app.get("/users")
+    async def serve_users():
+        return FileResponse(str(FRONTEND_DIR / "pages" / "users.html"))

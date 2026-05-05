@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, JSON, Boolean
 from app.database import Base
 
 
@@ -12,5 +12,8 @@ class User(Base):
     avatar_url = Column(String, nullable=True)
     timezone = Column(String, default="UTC")
     preferences = Column(JSON, default=dict)
+    status = Column(String, default="approved")       # approved | pending | rejected
+    is_admin = Column(Boolean, default=False)
+    notified_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

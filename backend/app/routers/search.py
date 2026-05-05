@@ -8,7 +8,7 @@ from app.models.journal import JournalEntry
 from app.models.memory import MemoryItem
 from app.models.task import Task
 from app.models.user import User
-from app.routers.auth import get_current_user
+from app.routers.auth import require_approved
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 @router.get("/")
 async def search(
     q: str = Query(..., min_length=1),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id

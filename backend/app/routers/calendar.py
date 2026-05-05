@@ -10,7 +10,7 @@ from app.models.document import Document
 from app.models.journal import JournalEntry
 from app.models.task import Task
 from app.models.user import User
-from app.routers.auth import get_current_user
+from app.routers.auth import require_approved
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -34,7 +34,7 @@ MOOD_EMOJI = {
 async def get_events(
     start: date = Query(...),
     end: date = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id
@@ -104,7 +104,7 @@ async def get_events(
 @router.get("/day-detail")
 async def get_day_detail(
     day: date = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id
@@ -160,7 +160,7 @@ async def get_day_detail(
 
 @router.get("/today")
 async def get_today_summary(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id

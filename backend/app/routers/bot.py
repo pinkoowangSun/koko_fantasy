@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone as _tz
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -497,3 +498,51 @@ async def bot_generate_plan(body: BotGeneratePlan, db: AsyncSession = Depends(ge
 
     await db.commit()
     return {"ok": True, "notes": result.get("notes", "")}
+
+
+# ── User approval ─────────────────────────────────────────────────────────────
+
+async def _send_telegram_message(chat_id: int, text: str):
+    async with httpx.AsyncClient(timeout=10) as client:
+        await client.post(
+            f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+        )
+
+
+@router.post("/users/{user_id}/approve", dependencies=[Depends(_bot_auth)])
+async def bot_approve_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.status = "approved"
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+    try:
+        await _send_telegram_message(
+            user.telegram_id,
+            "You can now access Koko Fantasy! Welcome babe:)",
+        )
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@router.post("/users/{user_id}/reject", dependencies=[Depends(_bot_auth)])
+async def bot_reject_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.status = "rejected"
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+    try:
+        await _send_telegram_message(
+            user.telegram_id,
+            "Sorry, your access request to Koko Fantasy has been declined.",
+        )
+    except Exception:
+        pass
+    return {"ok": True}

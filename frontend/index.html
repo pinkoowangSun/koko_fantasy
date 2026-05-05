@@ -55,6 +55,65 @@
       border-radius: 8px;
       padding: 9px 12px;
     }
+    .pending-box {
+      margin-top: 24px;
+      background: #FFFBEB;
+      border: 1px solid #FDE68A;
+      border-radius: 12px;
+      padding: 20px 16px;
+    }
+    .pending-box h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #92400E;
+    }
+    .pending-box p {
+      margin: 0;
+      font-size: 13px;
+      color: #78350F;
+      line-height: 1.5;
+    }
+    .rejected-box {
+      margin-top: 24px;
+      background: #FEF2F2;
+      border: 1px solid #FCA5A5;
+      border-radius: 12px;
+      padding: 20px 16px;
+    }
+    .rejected-box h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #991B1B;
+    }
+    .rejected-box p {
+      margin: 0 0 14px;
+      font-size: 13px;
+      color: #7F1D1D;
+      line-height: 1.5;
+    }
+    .btn-reapply {
+      background: #1A1917;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-reapply:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-signout {
+      margin-top: 16px;
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: #ABAAA5;
+      cursor: pointer;
+      text-decoration: underline;
+    }
     #telegram-login-wrap { display: flex; justify-content: center; }
   </style>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -70,12 +129,41 @@
       <div class="login-wordmark">Koko</div>
       <p class="login-tagline">Your personal life assistant</p>
 
-      <div id="telegram-login-wrap"></div>
+      <!-- Login button (only when not yet logged in) -->
+      <template x-if="view === 'login'">
+        <div>
+          <div id="telegram-login-wrap"></div>
+          <p class="login-footer">
+            Sign in with Telegram to continue.<br />
+            Your data is stored privately on your server.
+          </p>
+        </div>
+      </template>
 
-      <p class="login-footer">
-        Sign in with Telegram to continue.<br />
-        Your data is stored privately on your server.
-      </p>
+      <!-- Pending approval -->
+      <template x-if="view === 'pending'">
+        <div>
+          <div class="pending-box">
+            <h3>⏳ Access Pending</h3>
+            <p>Your request has been sent. You'll be notified on Telegram once the admin approves your account.</p>
+          </div>
+          <button class="btn-signout" @click="signOut()">Sign out</button>
+        </div>
+      </template>
+
+      <!-- Rejected -->
+      <template x-if="view === 'rejected'">
+        <div>
+          <div class="rejected-box">
+            <h3>Access Declined</h3>
+            <p>Your access request was not approved. You can request access again.</p>
+            <button class="btn-reapply" :disabled="reapplying" @click="requestAccess()">
+              <span x-text="reapplying ? 'Sending…' : 'Re-request Access'"></span>
+            </button>
+          </div>
+          <button class="btn-signout" @click="signOut()">Sign out</button>
+        </div>
+      </template>
 
       <template x-if="error">
         <p class="login-error" x-text="error"></p>
@@ -94,7 +182,12 @@
         if (!resp.ok) throw new Error('Auth failed');
         const data = await resp.json();
         localStorage.setItem('koko_token', data.token);
-        window.location.href = '/dashboard';
+        if (data.status === 'approved') {
+          window.location.href = '/dashboard';
+        } else {
+          // reload to show pending/rejected view
+          window.location.reload();
+        }
       } catch (e) {
         const el = document.querySelector('[x-data]');
         if (el && el._x_dataStack) el._x_dataStack[0].error = 'Login failed. Please try again.';
@@ -103,12 +196,40 @@
 
     function loginPage() {
       return {
+        view: 'login',   // login | pending | rejected
         error: null,
+        reapplying: false,
+        _pollTimer: null,
+
         async init() {
-          if (localStorage.getItem('koko_token')) {
-            window.location.href = '/dashboard';
-            return;
+          const token = localStorage.getItem('koko_token');
+          if (token) {
+            // Check current status
+            try {
+              const resp = await fetch('/api/auth/status', {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (resp.ok) {
+                const data = await resp.json();
+                if (data.status === 'approved') {
+                  window.location.href = '/dashboard';
+                  return;
+                } else if (data.status === 'pending') {
+                  this.view = 'pending';
+                  this._startPolling();
+                  return;
+                } else {
+                  this.view = 'rejected';
+                  return;
+                }
+              }
+            } catch (_) {}
+            // Token invalid — clear and show login
+            localStorage.removeItem('koko_token');
           }
+
+          // Show login widget
+          this.view = 'login';
           try {
             const cfg = await fetch('/api/config').then(r => r.json());
             if (!cfg.telegram_bot_username) {
@@ -126,6 +247,50 @@
           } catch (e) {
             this.error = 'Could not reach server.';
           }
+        },
+
+        _startPolling() {
+          this._pollTimer = setInterval(async () => {
+            const token = localStorage.getItem('koko_token');
+            if (!token) return;
+            try {
+              const resp = await fetch('/api/auth/status', {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (resp.ok) {
+                const data = await resp.json();
+                if (data.status === 'approved') {
+                  clearInterval(this._pollTimer);
+                  window.location.href = '/dashboard';
+                } else if (data.status === 'rejected') {
+                  clearInterval(this._pollTimer);
+                  this.view = 'rejected';
+                }
+              }
+            } catch (_) {}
+          }, 5000);
+        },
+
+        async requestAccess() {
+          this.reapplying = true;
+          try {
+            const token = localStorage.getItem('koko_token');
+            await fetch('/api/auth/request-access', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            this.view = 'pending';
+            this._startPolling();
+          } catch (_) {
+            this.error = 'Failed to send request. Try again.';
+          } finally {
+            this.reapplying = false;
+          }
+        },
+
+        signOut() {
+          localStorage.removeItem('koko_token');
+          window.location.reload();
         },
       };
     }

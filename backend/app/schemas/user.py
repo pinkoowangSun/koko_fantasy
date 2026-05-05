@@ -17,6 +17,8 @@ class UserResponse(BaseModel):
     avatar_url: Optional[str]
     timezone: str
     preferences: Dict[str, Any]
+    status: str = "approved"
+    is_admin: bool = False
     created_at: datetime
     updated_at: datetime
 

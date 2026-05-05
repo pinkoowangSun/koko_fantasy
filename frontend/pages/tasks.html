@@ -17,7 +17,10 @@
 
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="sidebar-logo" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></div>
+    <div class="sidebar-logo">
+  <span class="sidebar-logo-mark">✦</span>
+  <span class="sidebar-logo-text" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></span>
+</div>
     <nav style="display:flex;flex-direction:column;gap:2px">
       <a href="/dashboard" class="nav-link"><span class="nav-icon">📅</span><span class="nav-label">Daily Tracker</span></a>
       <a href="/tasks"     class="nav-link active"><span class="nav-icon">✅</span><span class="nav-label">Tasks</span></a>
@@ -216,6 +219,13 @@
   .task-checkbox__check {
     display: block;
     flex-shrink: 0;
+    transition: opacity 0.1s, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    opacity: 0;
+    transform: scale(0.2) rotate(-15deg);
+  }
+  .task-checkbox--done .task-checkbox__check {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
   }
 </style>
 
@@ -254,6 +264,9 @@
         requireAuth();
         API.get('/users/me').then(u => { this.username = u.username || ''; }).catch(() => {});
         await this.loadTasks();
+        window._koko_cmds = [
+          { label: 'New Task', icon: '✏️', hint: 'Create', section: 'Actions', action: () => this.openCreate() },
+        ];
       },
       async loadTasks() { this.tasks = await API.get('/tasks/'); },
 
@@ -287,8 +300,13 @@
       },
 
       async toggleDone(task) {
-        await API.patch(`/tasks/${task.id}`, { status: task.status === 'done' ? 'todo' : 'done' });
-        await this.loadTasks();
+        const prev = task.status;
+        task.status = prev === 'done' ? 'todo' : 'done';
+        try {
+          await API.patch(`/tasks/${task.id}`, { status: task.status });
+        } catch(e) {
+          task.status = prev;
+        }
       },
 
       async deleteTask(id) {
