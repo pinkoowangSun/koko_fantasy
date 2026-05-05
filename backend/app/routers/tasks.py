@@ -83,9 +83,18 @@ async def update_task(
     if not task:
         raise HTTPException(404, "Task not found")
 
-    for k, v in body.model_dump(exclude_none=True).items():
+    updates = body.model_dump(exclude_none=True)
+    for k, v in updates.items():
         setattr(task, k, v)
     task.updated_at = datetime.utcnow()
+
+    if updates.get("status") in ("done", "cancelled"):
+        pending = (await db.execute(
+            select(Reminder).where(Reminder.task_id == task_id, Reminder.sent.is_(False))
+        )).scalars().all()
+        for r in pending:
+            await db.delete(r)
+
     await db.commit()
     await db.refresh(task)
     return task
@@ -103,5 +112,12 @@ async def delete_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(404, "Task not found")
+
+    linked = (await db.execute(
+        select(Reminder).where(Reminder.task_id == task_id)
+    )).scalars().all()
+    for r in linked:
+        await db.delete(r)
+
     await db.delete(task)
     await db.commit()

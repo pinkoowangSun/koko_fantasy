@@ -1,6 +1,6 @@
 from pydantic import BaseModel, model_validator
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class TaskCreate(BaseModel):
@@ -15,7 +15,12 @@ class TaskCreate(BaseModel):
     @model_validator(mode="after")
     def set_reminder_default(self):
         if self.due_date and self.reminder_at is None:
-            self.reminder_at = self.due_date - timedelta(days=1)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            due = self.due_date.replace(tzinfo=None) if self.due_date.tzinfo else self.due_date
+            if due - now > timedelta(days=1):
+                self.reminder_at = due - timedelta(days=1)
+            else:
+                self.reminder_at = due
         return self
 
 

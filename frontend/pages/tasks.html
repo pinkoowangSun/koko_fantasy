@@ -19,14 +19,14 @@
   <aside class="sidebar">
     <div class="sidebar-logo" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></div>
     <nav style="display:flex;flex-direction:column;gap:2px">
-      <a href="/dashboard" class="nav-link">📅 Daily Tracker</a>
-      <a href="/tasks"     class="nav-link active">✅ Tasks</a>
-      <a href="/workout"   class="nav-link">🏋️ Workout</a>
-      <a href="/documents" class="nav-link">📄 Documents</a>
-      <a href="/profile"   class="nav-link">👤 Profile</a>
+      <a href="/dashboard" class="nav-link"><span class="nav-icon">📅</span><span class="nav-label">Daily Tracker</span></a>
+      <a href="/tasks"     class="nav-link active"><span class="nav-icon">✅</span><span class="nav-label">Tasks</span></a>
+      <a href="/workout"   class="nav-link"><span class="nav-icon">🏋️</span><span class="nav-label">Workout</span></a>
+      <a href="/documents" class="nav-link"><span class="nav-icon">📄</span><span class="nav-label">Documents</span></a>
+      <a href="/profile"   class="nav-link"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></a>
     </nav>
     <div style="flex:1"></div>
-    <button @click="logout()" class="nav-link danger" style="color:#9CA3AF">← Sign out</button>
+    <button @click="logout()" class="nav-link danger"><span class="nav-icon">←</span><span class="nav-label">Sign out</span></button>
   </aside>
 
   <!-- Main -->
@@ -82,9 +82,13 @@
         <div class="card" style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;transition:box-shadow .12s"
              onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.07)'"
              onmouseout="this.style.boxShadow=''">
-          <button @click="toggleStatus(task)"
-            style="font-size:18px;margin-top:1px;flex-shrink:0;background:none;border:none;cursor:pointer;padding:0;line-height:1"
-            x-text="statusIcon(task.status)">
+          <button @click="toggleDone(task)"
+            :title="task.status === 'done' ? 'Mark as todo' : 'Mark as done'"
+            class="task-checkbox"
+            :class="task.status === 'done' ? 'task-checkbox--done' : ''">
+            <svg width="9" height="7" viewBox="0 0 9 7" fill="none" xmlns="http://www.w3.org/2000/svg" class="task-checkbox__check">
+              <path d="M1 3.5L3.2 5.5L8 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
           </button>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -103,10 +107,10 @@
             </template>
             <div style="display:flex;gap:14px;margin-top:4px;font-size:12px;color:#ABAAA5">
               <template x-if="task.due_date">
-                <span>Due <span x-text="fmtDate(task.due_date)"></span></span>
+                <span>Due <span x-text="fmtDatetime(task.due_date)"></span></span>
               </template>
               <template x-if="task.reminder_at">
-                <span>⏰ <span x-text="fmtDate(task.reminder_at)"></span></span>
+                <span>⏰ <span x-text="fmtDatetime(task.reminder_at)"></span></span>
               </template>
             </div>
           </div>
@@ -161,7 +165,9 @@
       </div>
       <div>
         <label class="field-label">Due date</label>
-        <input type="datetime-local" x-model="form.due_date" class="input" />
+        <input type="datetime-local" x-model="form.due_date" class="input"
+               @change="if(form.due_date && form.due_date.length===10) form.due_date += 'T23:59';
+                        else if(form.due_date && form.due_date.endsWith('T00:00')) form.due_date = form.due_date.slice(0,10) + 'T23:59'" />
       </div>
       <div>
         <label class="field-label">Tags (comma-separated)</label>
@@ -177,6 +183,40 @@
 
 <style>
   .card:hover .task-actions { opacity: 1 !important; }
+
+  .task-checkbox {
+    flex-shrink: 0;
+    margin-top: 1px;
+    width: 17px;
+    height: 17px;
+    border-radius: 5px;
+    border: 1.5px solid #C8C7C2;
+    background: #fff;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, background 0.15s;
+    color: transparent;
+  }
+  .task-checkbox:hover {
+    border-color: #1A1917;
+    background: #F6F5F2;
+  }
+  .task-checkbox--done {
+    border-color: #1A1917;
+    background: #1A1917;
+    color: #fff;
+  }
+  .task-checkbox--done:hover {
+    border-color: #333228;
+    background: #333228;
+  }
+  .task-checkbox__check {
+    display: block;
+    flex-shrink: 0;
+  }
 </style>
 
 <script src="/static/js/app.js"></script>
@@ -246,7 +286,7 @@
         } catch(e) { alert('Save failed: ' + e.message); }
       },
 
-      async toggleStatus(task) {
+      async toggleDone(task) {
         await API.patch(`/tasks/${task.id}`, { status: task.status === 'done' ? 'todo' : 'done' });
         await this.loadTasks();
       },

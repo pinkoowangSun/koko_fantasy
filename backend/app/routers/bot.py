@@ -104,7 +104,8 @@ class BotTaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     priority: str = "medium"
-    due_date: Optional[str] = None  # ISO string
+    due_date: Optional[str] = None   # ISO string
+    remind_at: Optional[str] = None  # ISO string — explicit reminder time
     tags: list[str] = []
 
 
@@ -114,15 +115,26 @@ async def bot_create_task(body: BotTaskCreate, db: AsyncSession = Depends(get_db
 
     due_date = None
     reminder_at = None
+
     if body.due_date:
         try:
             due_date = _parse_remind_at(body.due_date)
-            # Remind 30 min before due time — but only if that moment is still in the future
-            candidate = due_date - timedelta(minutes=30)
-            if candidate > datetime.utcnow():
-                reminder_at = candidate
         except ValueError:
             pass
+
+    if body.remind_at:
+        try:
+            reminder_at = _parse_remind_at(body.remind_at)
+            if reminder_at <= datetime.utcnow():
+                reminder_at = None
+        except ValueError:
+            pass
+    elif due_date:
+        # default: 1 day before if due date is more than 24 h away, otherwise at due time
+        if due_date - datetime.utcnow() > timedelta(days=1):
+            reminder_at = due_date - timedelta(days=1)
+        else:
+            reminder_at = due_date
 
     task = Task(
         user_id=user.id,
@@ -140,13 +152,15 @@ async def bot_create_task(body: BotTaskCreate, db: AsyncSession = Depends(get_db
         db.add(Reminder(
             user_id=user.id,
             task_id=task.id,
-            message=f"Task due: {task.title}",
+            message=f"⏰ Reminder: {task.title}",
             remind_at=reminder_at,
         ))
 
     await db.commit()
     await db.refresh(task)
-    return {"id": task.id, "title": task.title, "status": task.status}
+
+    fmt = _fmt_remind_at(reminder_at, user.timezone) if reminder_at else None
+    return {"id": task.id, "title": task.title, "status": task.status, "reminder_formatted": fmt}
 
 
 @router.get("/tasks", dependencies=[Depends(_bot_auth)])
@@ -194,34 +208,6 @@ async def bot_complete_task(body: BotCompleteTask, db: AsyncSession = Depends(ge
     task.updated_at = datetime.utcnow()
     await db.commit()
     return {"ok": True, "title": task.title}
-
-
-# ── Reminders ─────────────────────────────────────────────────────────────────
-
-class BotReminderCreate(BaseModel):
-    telegram_id: int
-    message: str
-    remind_at: str  # ISO 8601 datetime (with offset so we can convert to UTC)
-
-
-@router.post("/reminders", dependencies=[Depends(_bot_auth)])
-async def bot_create_reminder(body: BotReminderCreate, db: AsyncSession = Depends(get_db)):
-    user = await _require_user(body.telegram_id, db)
-
-    try:
-        remind_at_utc = _parse_remind_at(body.remind_at)
-    except (ValueError, AttributeError) as exc:
-        raise HTTPException(400, f"Invalid remind_at datetime: {exc}")
-
-    if remind_at_utc <= datetime.utcnow():
-        raise HTTPException(400, "Reminder time must be in the future")
-
-    reminder = Reminder(user_id=user.id, message=body.message, remind_at=remind_at_utc)
-    db.add(reminder)
-    await db.commit()
-
-    fmt = _fmt_remind_at(remind_at_utc, user.timezone)
-    return {"ok": True, "remind_at": remind_at_utc.isoformat(), "formatted": fmt}
 
 
 # ── Journal ───────────────────────────────────────────────────────────────────

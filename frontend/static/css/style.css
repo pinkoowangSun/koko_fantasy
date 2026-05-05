@@ -36,23 +36,35 @@ body {
 .nav-link {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
+  gap: 0;
+  padding: 9px 10px;
   border-radius: 8px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: #78776E;
+  font-size: 13px;
+  font-weight: 400;
+  color: #A8A79F;
   text-decoration: none;
-  transition: background 0.12s, color 0.12s;
+  transition: color 0.12s, background 0.12s;
   cursor: pointer;
   border: none;
   background: none;
   width: 100%;
   text-align: left;
-  line-height: 1.4;
+  line-height: 1;
 }
-.nav-link:hover  { background: #F0EFE9; color: #1A1917; }
-.nav-link.active { background: #EDECE6; color: #1A1917; font-weight: 600; }
+.nav-link .nav-icon {
+  width: 20px;
+  flex-shrink: 0;
+  font-size: 14px;
+  text-align: center;
+  line-height: 1;
+}
+.nav-link .nav-label {
+  margin-left: 16px;
+  letter-spacing: 0.01em;
+}
+.nav-link:hover  { color: #1A1917; background: #F6F5F2; }
+.nav-link.active { color: #1A1917; font-weight: 500; background: none; }
+.nav-link.danger { color: #ABAAA5; }
 .nav-link.danger:hover { background: #FEF2F2; color: #DC2626; }
 
 /* ── Cards ─────────────────────────────────────────────── */

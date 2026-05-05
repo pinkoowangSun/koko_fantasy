@@ -27,12 +27,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             task = await api("post", "/tasks", json={
                 "telegram_id": user.id,
-                **{k: data[k] for k in ("title", "description", "priority", "due_date", "tags") if k in data},
+                **{k: data[k] for k in ("title", "description", "priority", "due_date", "remind_at", "tags") if k in data},
             })
-            await update.message.reply_text(
-                f"✅ Task added: *{task['title']}*",
-                parse_mode="Markdown",
-            )
+            msg = f"✅ Task added: *{task['title']}*"
+            fmt = task.get("reminder_formatted")
+            if fmt:
+                msg += f"\n⏰ Reminder set for {fmt}"
+            await update.message.reply_text(msg, parse_mode="Markdown")
         except Exception:
             await update.message.reply_text(response_text or "Task created!")
 
@@ -123,27 +124,5 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             await update.message.reply_text(f"Couldn't generate plan: {exc}")
 
-    elif intent == "add_reminder":
-        remind_at = data.get("remind_at")
-        message = data.get("message", text)
-        if not remind_at:
-            await update.message.reply_text(
-                "⏰ I need a specific time to set the reminder — when should I remind you?"
-            )
-            return
-        try:
-            result = await api("post", "/reminders", json={
-                "telegram_id": user.id,
-                "message": message,
-                "remind_at": remind_at,
-            })
-            fmt = result.get("formatted", remind_at)
-            await update.message.reply_text(
-                f"⏰ Reminder set!\n*{message}*\n🕐 {fmt}",
-                parse_mode="Markdown",
-            )
-        except Exception as exc:
-            await update.message.reply_text(response_text or f"Couldn't set the reminder: {exc}")
-
     else:
-        await update.message.reply_text(response_text or "I'm not sure how to help with that.")
+        await update.message.reply_text((response_text or "").strip() or "I'm not sure how to help with that.")

@@ -32,16 +32,14 @@
   <aside class="sidebar">
     <div class="sidebar-logo" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></div>
     <nav style="display:flex;flex-direction:column;gap:2px">
-      <a href="/dashboard" class="nav-link active">📅 Daily Tracker</a>
-      <a href="/tasks"     class="nav-link">✅ Tasks</a>
-      <a href="/workout"   class="nav-link">🏋️ Workout</a>
-      <a href="/documents" class="nav-link">📄 Documents</a>
-      <a href="/profile"   class="nav-link">👤 Profile</a>
+      <a href="/dashboard" class="nav-link active"><span class="nav-icon">📅</span><span class="nav-label">Daily Tracker</span></a>
+      <a href="/tasks"     class="nav-link"><span class="nav-icon">✅</span><span class="nav-label">Tasks</span></a>
+      <a href="/workout"   class="nav-link"><span class="nav-icon">🏋️</span><span class="nav-label">Workout</span></a>
+      <a href="/documents" class="nav-link"><span class="nav-icon">📄</span><span class="nav-label">Documents</span></a>
+      <a href="/profile"   class="nav-link"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></a>
     </nav>
     <div style="flex:1"></div>
-    <button @click="logout()" class="nav-link danger" style="color:#9CA3AF">
-      ← Sign out
-    </button>
+    <button @click="logout()" class="nav-link danger"><span class="nav-icon">←</span><span class="nav-label">Sign out</span></button>
   </aside>
 
   <!-- Main -->
