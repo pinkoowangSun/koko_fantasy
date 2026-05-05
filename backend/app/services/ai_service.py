@@ -156,6 +156,66 @@ async def parse_workout_log(user_id: int, text: str) -> dict:
         return {"category": "mixed", "summary": text[:200]}
 
 
+async def generate_workout_insights(logs_data: list) -> dict:
+    """Analyse structured workout history and return fitness insights."""
+    if not logs_data:
+        return {
+            "summary": "No workout history yet. Start logging your workouts to get personalised insights!",
+            "consistency": "No data available yet.",
+            "strengths": [],
+            "improvements": ["Log your first workout to get started"],
+            "trends": [],
+            "recommendations": ["Begin by logging your workouts — even a short walk counts!"],
+        }
+
+    logs_str = json.dumps(logs_data, indent=2)
+
+    prompt = f"""\
+You are an expert fitness coach and data analyst. Analyse the following workout history (last 8 weeks) and return structured insights.
+
+WORKOUT HISTORY:
+{logs_str}
+
+Return ONLY this JSON (no markdown fences):
+{{
+  "summary": "<2-3 sentence overall observation about the user's fitness journey and progress>",
+  "consistency": "<1 sentence about workout frequency and consistency patterns, including average sessions per week>",
+  "strengths": ["<specific strength 1>", "<specific strength 2>", "<specific strength 3>"],
+  "improvements": ["<specific area to improve 1>", "<specific area to improve 2>"],
+  "trends": ["<observable trend 1 referencing actual data>", "<observable trend 2>"],
+  "recommendations": ["<concrete actionable recommendation 1>", "<concrete actionable recommendation 2>", "<concrete actionable recommendation 3>"]
+}}
+
+Rules:
+- Be specific — reference actual exercises, dates, or patterns from the data
+- Strengths: things the user is doing well (exactly 3 items)
+- Improvements: muscle groups neglected or habits to fix (2–3 items)
+- Trends: patterns visible over time such as frequency changes, volume shifts, category patterns (2–3 items)
+- Recommendations: concrete next-step actions the user can take this week (exactly 3 items)
+"""
+
+    resp = await _client.chat.completions.create(
+        model=settings.DEEPSEEK_MODEL,
+        messages=[
+            {"role": "system", "content": "You are an expert fitness coach. Output valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.4,
+        response_format={"type": "json_object"},
+    )
+    try:
+        return json.loads(resp.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {
+            "summary": "Unable to generate insights at this time. Please try again.",
+            "consistency": "Analysis unavailable.",
+            "strengths": [],
+            "improvements": [],
+            "trends": [],
+            "recommendations": ["Please try again later"],
+        }
+
+
 async def generate_workout_plan(user_id: int, logs_context: str, user_memory: str = "", workout_preference: str = "") -> dict:
     """Generate a detailed, adaptive weekly workout plan using DeepSeek."""
     today_name = datetime.now().strftime("%A")

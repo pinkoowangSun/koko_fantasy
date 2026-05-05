@@ -10,26 +10,29 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     .tab-bar { display:flex; gap:4px; background:#F0EFE9; border-radius:10px; padding:3px; margin-bottom:24px; width:fit-content; }
-    .tab-btn { padding:6px 18px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:none; background:transparent; color:#78776E; transition:all .12s; font-family:inherit; }
+    .tab-btn { padding:6px 20px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:none; background:transparent; color:#78776E; transition:all .12s; font-family:inherit; }
     .tab-btn.active { background:#fff; color:#1A1917; box-shadow:0 1px 3px rgba(0,0,0,.08); }
 
     .week-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:10px; margin-bottom:24px; }
     @media(max-width:900px) { .week-grid { grid-template-columns:repeat(4,1fr); } }
     @media(max-width:600px) { .week-grid { grid-template-columns:repeat(2,1fr); } }
 
-    .day-card { background:#fff; border:1px solid #E8E7E3; border-radius:12px; padding:14px; min-height:160px; position:relative; cursor:default; transition:box-shadow .12s; }
+    .day-card { background:#fff; border:1px solid #E8E7E3; border-radius:12px; padding:14px; min-height:160px; position:relative; transition:box-shadow .12s; }
     .day-card.today { border-color:#1A1917; box-shadow:0 0 0 2px rgba(26,25,23,.08); }
     .day-card.rest-day { background:#FAFAF8; }
-    .day-name { font-size:11px; font-weight:600; color:#78776E; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+    .day-name  { font-size:11px; font-weight:600; color:#78776E; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
     .day-focus { font-size:13px; font-weight:600; color:#1A1917; margin-bottom:8px; line-height:1.3; }
     .day-duration { font-size:11.5px; color:#ABAAA5; margin-top:6px; }
     .exercise-pill { display:inline-block; font-size:11px; background:#F0EFE9; color:#4A4940; border-radius:5px; padding:2px 7px; margin:2px 2px 2px 0; line-height:1.6; }
     .rest-badge { font-size:11px; color:#ABAAA5; font-style:italic; margin-top:4px; }
 
-    .log-area { resize:vertical; min-height:100px; }
+    .ai-notes-box { background:#F6F5F2; border-radius:10px; padding:14px 16px; font-size:13px; color:#4A4940; line-height:1.6; margin-bottom:20px; }
+    .section-label { font-size:11px; font-weight:600; color:#ABAAA5; text-transform:uppercase; letter-spacing:.5px; }
 
+    /* History */
     .history-item { background:#fff; border:1px solid #E8E7E3; border-radius:12px; padding:16px 18px; }
     .cat-badge { display:inline-block; font-size:11.5px; font-weight:500; border-radius:20px; padding:2px 10px; }
     .cat-cardio      { background:#DBEAFE; color:#1D4ED8; }
@@ -40,12 +43,24 @@
     .cat-mixed       { background:#E0F2FE; color:#075985; }
     .cat-rest        { background:#F3F4F6; color:#6B7280; }
 
+    /* Insight chips */
+    .insight-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+    @media(max-width:600px) { .insight-grid { grid-template-columns:1fr; } }
+    .insight-chip { border-radius:10px; padding:13px 15px; font-size:12.5px; line-height:1.7; }
+    .insight-chip ul { margin:6px 0 0; padding-left:16px; }
+    .insight-chip li { margin-bottom:2px; }
+
+    /* Log / edit modal */
+    .log-area { resize:vertical; min-height:88px; }
+    .ex-input { font-size:12px; padding:6px 8px; border:1px solid #E8E7E3; border-radius:7px; background:#fff; font-family:inherit; width:100%; box-sizing:border-box; }
+    .ex-input:focus { outline:none; border-color:#1A1917; }
+    .icon-btn { background:none; border:none; cursor:pointer; padding:4px 6px; border-radius:6px; line-height:1; color:#ABAAA5; transition:background .1s,color .1s; }
+    .icon-btn:hover { background:#F0EFE9; color:#1A1917; }
+    .icon-btn.danger:hover { background:#FEE2E2; color:#DC2626; }
+
     .no-plan-cta { text-align:center; padding:60px 24px; }
     .no-plan-cta h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
     .no-plan-cta p  { font-size:13.5px; color:#78776E; margin-bottom:24px; max-width:380px; margin-inline:auto; }
-
-    .ai-notes-box { background:#F6F5F2; border-radius:10px; padding:14px 16px; font-size:13px; color:#4A4940; line-height:1.6; margin-bottom:20px; }
-    .ai-notes-label { font-size:11px; font-weight:600; color:#ABAAA5; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
 
     .spinner { display:inline-block; width:16px; height:16px; border:2px solid #E8E7E3; border-top-color:#1A1917; border-radius:50%; animation:spin .6s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
@@ -95,19 +110,18 @@
     <!-- Preference hint -->
     <div style="font-size:12.5px;color:#78776E;background:#F6F5F2;border-radius:9px;padding:9px 14px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
       <span>💡</span>
-      <span>Your plan is personalised using your workout history. To guide the AI further — e.g. <em>"weight loss, 4 days/week, no equipment"</em> — go to <a href="/profile" style="color:#1A1917;font-weight:500;text-decoration:underline">Profile</a> and add a memory item with key <strong>workout</strong>.</span>
+      <span>AI plans use your history + preferences. Set your goals on <a href="/profile" style="color:#1A1917;font-weight:500;text-decoration:underline">Profile</a> with key <strong>workout</strong> — e.g. <em>"weight loss, 4 days/week, no equipment"</em>.</span>
     </div>
 
-    <!-- Tab bar -->
+    <!-- Tab bar: 2 tabs only -->
     <div class="tab-bar">
-      <button class="tab-btn" :class="{active:tab==='plan'}"    @click="tab='plan'">Weekly Plan</button>
-      <button class="tab-btn" :class="{active:tab==='history'}" @click="tab='history';loadLogs()">History</button>
+      <button class="tab-btn" :class="{active:tab==='plan'}"     @click="switchTab('plan')">Weekly Plan</button>
+      <button class="tab-btn" :class="{active:tab==='workouts'}" @click="switchTab('workouts')">Workouts</button>
     </div>
 
-    <!-- ── PLAN TAB ── -->
+    <!-- ══ PLAN TAB ══════════════════════════════════════════════ -->
     <div x-show="tab==='plan'">
 
-      <!-- Loading -->
       <template x-if="loadingPlan">
         <div class="card" style="text-align:center;padding:48px;color:#ABAAA5">
           <div class="spinner" style="width:24px;height:24px;margin:0 auto 12px"></div>
@@ -115,12 +129,11 @@
         </div>
       </template>
 
-      <!-- No plan -->
       <template x-if="!loadingPlan && !plan">
         <div class="card no-plan-cta">
           <div style="font-size:40px;margin-bottom:16px">🏋️</div>
           <h2>No plan for this week yet</h2>
-          <p>Let the AI analyse your workout history and create a personalised weekly plan with detailed exercises, sets, reps, and guidance.</p>
+          <p>Let the AI analyse your workout history and create a personalised weekly plan with exercises, sets, reps, and guidance.</p>
           <button @click="generatePlan()" class="btn btn-primary" :disabled="generating" style="font-size:14px;padding:10px 24px">
             <span x-show="generating" class="spinner"></span>
             <span x-show="!generating">✨ Generate AI Plan</span>
@@ -129,17 +142,16 @@
         </div>
       </template>
 
-      <!-- Plan grid -->
       <template x-if="!loadingPlan && plan">
         <div>
-          <!-- AI notes -->
           <template x-if="plan.ai_notes">
             <div class="ai-notes-box">
-              <div class="ai-notes-label">🤖 AI Trainer Notes</div>
+              <div class="section-label" style="margin-bottom:6px">🤖 AI Trainer Notes</div>
               <span x-text="plan.ai_notes"></span>
             </div>
           </template>
 
+          <!-- 7-day grid -->
           <div class="week-grid">
             <template x-for="day in days" :key="day.key">
               <div class="day-card" :class="{today: day.isToday, 'rest-day': isRestDay(day.key)}">
@@ -171,7 +183,6 @@
                 <template x-if="!dayPlan(day.key)">
                   <div class="rest-badge">No plan</div>
                 </template>
-                <!-- "Today" pill -->
                 <template x-if="day.isToday">
                   <div style="position:absolute;top:10px;right:10px;background:#1A1917;color:#fff;font-size:10px;font-weight:600;border-radius:4px;padding:2px 7px;letter-spacing:.3px">TODAY</div>
                 </template>
@@ -180,57 +191,221 @@
           </div>
 
           <!-- Day detail expand -->
-          <div style="margin-top:4px">
-            <template x-for="day in days" :key="'detail-' + day.key">
-              <template x-if="dayPlan(day.key) && !isRestDay(day.key) && (dayPlan(day.key).exercises || []).length > 0">
-                <div class="card" style="margin-bottom:10px">
-                  <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" @click="toggleDay(day.key)">
-                    <div>
-                      <span style="font-size:13px;font-weight:600;color:#1A1917" x-text="day.label + ' — ' + dayPlan(day.key).focus"></span>
-                      <template x-if="day.isToday">
-                        <span style="margin-left:8px;background:#1A1917;color:#fff;font-size:10px;font-weight:600;border-radius:4px;padding:2px 7px">TODAY</span>
-                      </template>
-                    </div>
-                    <span style="color:#ABAAA5;font-size:13px" x-text="expandedDay===day.key ? '▲' : '▼'"></span>
+          <template x-for="day in days" :key="'d-' + day.key">
+            <template x-if="dayPlan(day.key) && !isRestDay(day.key) && (dayPlan(day.key).exercises || []).length > 0">
+              <div class="card" style="margin-bottom:10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" @click="toggleDay(day.key)">
+                  <div>
+                    <span style="font-size:13px;font-weight:600;color:#1A1917" x-text="day.label + ' — ' + dayPlan(day.key).focus"></span>
+                    <template x-if="day.isToday">
+                      <span style="margin-left:8px;background:#1A1917;color:#fff;font-size:10px;font-weight:600;border-radius:4px;padding:2px 7px">TODAY</span>
+                    </template>
                   </div>
-
-                  <template x-if="expandedDay===day.key">
-                    <div style="margin-top:14px">
-                      <template x-if="dayPlan(day.key).warmup">
-                        <div style="font-size:12.5px;color:#78776E;margin-bottom:10px">🔥 <strong>Warm-up:</strong> <span x-text="dayPlan(day.key).warmup"></span></div>
-                      </template>
-                      <table style="width:100%;border-collapse:collapse;font-size:13px">
-                        <thead>
-                          <tr style="border-bottom:1px solid #E8E7E3">
-                            <th style="text-align:left;padding:6px 0;color:#78776E;font-weight:500;font-size:12px">Exercise</th>
-                            <th style="text-align:center;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Sets</th>
-                            <th style="text-align:center;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Reps</th>
-                            <th style="text-align:center;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Weight</th>
-                            <th style="text-align:left;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <template x-for="ex in (dayPlan(day.key).exercises || [])" :key="ex.name">
-                            <tr style="border-bottom:1px solid #F0EFE9">
-                              <td style="padding:8px 0;font-weight:500" x-text="ex.name"></td>
-                              <td style="text-align:center;padding:8px" x-text="ex.sets || '—'"></td>
-                              <td style="text-align:center;padding:8px;color:#4A4940" x-text="ex.reps || '—'"></td>
-                              <td style="text-align:center;padding:8px;color:#4A4940" x-text="ex.weight || '—'"></td>
-                              <td style="padding:8px;color:#78776E;font-size:12px" x-text="ex.notes || ''"></td>
-                            </tr>
-                          </template>
-                        </tbody>
-                      </table>
-                      <template x-if="dayPlan(day.key).cooldown">
-                        <div style="font-size:12.5px;color:#78776E;margin-top:10px">🧊 <strong>Cool-down:</strong> <span x-text="dayPlan(day.key).cooldown"></span></div>
-                      </template>
-                      <template x-if="dayPlan(day.key).notes">
-                        <div style="font-size:12.5px;color:#78776E;margin-top:8px;background:#F6F5F2;border-radius:8px;padding:10px">📝 <span x-text="dayPlan(day.key).notes"></span></div>
-                      </template>
-                    </div>
-                  </template>
+                  <span style="color:#ABAAA5;font-size:13px" x-text="expandedDay===day.key ? '▲' : '▼'"></span>
                 </div>
+                <template x-if="expandedDay===day.key">
+                  <div style="margin-top:14px">
+                    <template x-if="dayPlan(day.key).warmup">
+                      <div style="font-size:12.5px;color:#78776E;margin-bottom:10px">🔥 <strong>Warm-up:</strong> <span x-text="dayPlan(day.key).warmup"></span></div>
+                    </template>
+                    <table style="width:100%;border-collapse:collapse;font-size:13px">
+                      <thead>
+                        <tr style="border-bottom:1px solid #E8E7E3">
+                          <th style="text-align:left;padding:6px 0;color:#78776E;font-weight:500;font-size:12px">Exercise</th>
+                          <th style="text-align:center;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Sets</th>
+                          <th style="text-align:center;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Reps</th>
+                          <th style="text-align:center;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Weight</th>
+                          <th style="text-align:left;padding:6px 8px;color:#78776E;font-weight:500;font-size:12px">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="ex in (dayPlan(day.key).exercises || [])" :key="ex.name">
+                          <tr style="border-bottom:1px solid #F0EFE9">
+                            <td style="padding:8px 0;font-weight:500" x-text="ex.name"></td>
+                            <td style="text-align:center;padding:8px" x-text="ex.sets || '—'"></td>
+                            <td style="text-align:center;padding:8px;color:#4A4940" x-text="ex.reps || '—'"></td>
+                            <td style="text-align:center;padding:8px;color:#4A4940" x-text="ex.weight || '—'"></td>
+                            <td style="padding:8px;color:#78776E;font-size:12px" x-text="ex.notes || ''"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                    <template x-if="dayPlan(day.key).cooldown">
+                      <div style="font-size:12.5px;color:#78776E;margin-top:10px">🧊 <strong>Cool-down:</strong> <span x-text="dayPlan(day.key).cooldown"></span></div>
+                    </template>
+                    <template x-if="dayPlan(day.key).notes">
+                      <div style="font-size:12.5px;color:#78776E;margin-top:8px;background:#F6F5F2;border-radius:8px;padding:10px">📝 <span x-text="dayPlan(day.key).notes"></span></div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- ══ WORKOUTS TAB (chart + insights + history) ═════════════ -->
+    <div x-show="tab==='workouts'">
+
+      <template x-if="loadingLogs">
+        <div class="card" style="text-align:center;padding:48px;color:#ABAAA5">
+          <div class="spinner" style="width:24px;height:24px;margin:0 auto 12px"></div>
+          <p style="font-size:13.5px">Loading…</p>
+        </div>
+      </template>
+
+      <template x-if="!loadingLogs">
+        <div>
+
+          <!-- ── Intensity chart ─────────────────────────────── -->
+          <div class="card" style="margin-bottom:14px">
+            <div style="margin-bottom:10px">
+              <div class="section-label">Session Intensity — last 20 workouts</div>
+              <div style="font-size:11.5px;color:#ABAAA5;margin-top:3px">Bars = sets logged &nbsp;·&nbsp; Line = max weight (kg)</div>
+            </div>
+            <!-- Legend using same cat-badge classes as history items -->
+            <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
+              <template x-for="item in catLegend" :key="item.name">
+                <span class="cat-badge" :class="'cat-' + item.name" x-text="item.name.replace(/_/g,' ')"></span>
               </template>
+            </div>
+            <template x-if="logs.length === 0">
+              <div style="text-align:center;padding:40px;color:#ABAAA5;font-size:13.5px">
+                Log some workouts to see your intensity chart.
+              </div>
+            </template>
+            <template x-if="logs.length > 0">
+              <canvas id="chartIntensity" style="max-height:240px"></canvas>
+            </template>
+          </div>
+
+          <!-- ── AI Insights ─────────────────────────────────── -->
+          <div class="card" style="margin-bottom:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div class="section-label">🤖 AI Insights</div>
+              <button @click="loadInsights()" class="btn btn-secondary" style="font-size:12px;padding:5px 12px" :disabled="loadingInsights">
+                <span x-show="loadingInsights" class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>
+                <span x-show="!loadingInsights && !insights">Analyse</span>
+                <span x-show="insights && !loadingInsights">Refresh</span>
+              </button>
+            </div>
+
+            <template x-if="loadingInsights">
+              <div style="text-align:center;padding:24px;color:#ABAAA5;font-size:13px">Analysing your workout history…</div>
+            </template>
+
+            <template x-if="insights && !loadingInsights">
+              <div>
+                <!-- Summary + consistency pill -->
+                <p style="font-size:13.5px;color:#1A1917;line-height:1.7;margin:12px 0 8px" x-text="insights.summary"></p>
+                <div style="background:#F6F5F2;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#4A4940;margin-bottom:4px">
+                  📊 <span x-text="insights.consistency"></span>
+                </div>
+
+                <div class="insight-grid">
+                  <!-- Strengths -->
+                  <div class="insight-chip" style="background:#D1FAE5">
+                    <div style="font-size:11px;font-weight:600;color:#065F46;text-transform:uppercase;letter-spacing:.4px">💪 Strengths</div>
+                    <ul style="margin:6px 0 0;padding-left:16px;color:#065F46">
+                      <template x-for="s in insights.strengths" :key="s"><li x-text="s"></li></template>
+                    </ul>
+                  </div>
+                  <!-- Improvements -->
+                  <div class="insight-chip" style="background:#FEF3C7">
+                    <div style="font-size:11px;font-weight:600;color:#92400E;text-transform:uppercase;letter-spacing:.4px">🎯 Improve</div>
+                    <ul style="margin:6px 0 0;padding-left:16px;color:#92400E">
+                      <template x-for="s in insights.improvements" :key="s"><li x-text="s"></li></template>
+                    </ul>
+                  </div>
+                  <!-- Trends -->
+                  <div class="insight-chip" style="background:#DBEAFE">
+                    <div style="font-size:11px;font-weight:600;color:#1D4ED8;text-transform:uppercase;letter-spacing:.4px">📈 Trends</div>
+                    <ul style="margin:6px 0 0;padding-left:16px;color:#1D4ED8">
+                      <template x-for="s in insights.trends" :key="s"><li x-text="s"></li></template>
+                    </ul>
+                  </div>
+                  <!-- Recommendations -->
+                  <div class="insight-chip" style="background:#F0EFE9">
+                    <div style="font-size:11px;font-weight:600;color:#1A1917;text-transform:uppercase;letter-spacing:.4px">🚀 This Week</div>
+                    <ul style="margin:6px 0 0;padding-left:16px;color:#1A1917">
+                      <template x-for="s in insights.recommendations" :key="s"><li x-text="s"></li></template>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="!insights && !loadingInsights">
+              <div style="font-size:12.5px;color:#ABAAA5;margin-top:10px">Click Analyse to get AI feedback on your last 8 weeks.</div>
+            </template>
+          </div>
+
+          <!-- ── History list ────────────────────────────────── -->
+          <div class="section-label" style="margin-bottom:10px">History</div>
+
+          <template x-if="logs.length === 0">
+            <div class="card" style="text-align:center;padding:40px;color:#ABAAA5">
+              <p style="font-size:14px">No workouts logged yet.</p>
+              <p style="font-size:13px;margin-top:6px">Click "+ Log Workout" to get started.</p>
+            </div>
+          </template>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <template x-for="log in logs" :key="log.id">
+              <div class="history-item">
+                <!-- Header row: date / badges / actions -->
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:12.5px;font-weight:600;color:#1A1917" x-text="fmtLogDate(log.log_date)"></span>
+                    <span class="cat-badge" :class="'cat-' + (log.category || 'mixed')" x-text="(log.category || 'mixed').replace(/_/g,' ')"></span>
+                    <span style="font-size:11.5px;color:#ABAAA5" x-text="log.source === 'telegram' ? '📱 Telegram' : '💻 Web'"></span>
+                  </div>
+                  <!-- Action buttons -->
+                  <div style="display:flex;gap:2px;flex-shrink:0" x-show="deletingId !== log.id">
+                    <button class="icon-btn" @click="openEdit(log)" title="Edit">✏️</button>
+                    <button class="icon-btn danger" @click="deletingId = log.id" title="Delete">🗑️</button>
+                  </div>
+                  <!-- Inline delete confirm -->
+                  <div x-show="deletingId === log.id" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                    <span style="font-size:12px;color:#DC2626">Delete?</span>
+                    <button class="btn btn-secondary" style="font-size:11.5px;padding:3px 10px" @click="deletingId = null">Cancel</button>
+                    <button class="btn" style="font-size:11.5px;padding:3px 10px;background:#DC2626;color:#fff;border-color:#DC2626" @click="deleteLog(log.id)">Delete</button>
+                  </div>
+                </div>
+
+                <!-- Body -->
+                <div style="font-size:13px;color:#4A4940;line-height:1.5" x-text="log.raw_text"></div>
+                <template x-if="log.summary && log.summary !== log.raw_text">
+                  <div style="font-size:12px;color:#78776E;margin-top:5px;font-style:italic" x-text="log.summary"></div>
+                </template>
+
+                <!-- Structured exercises -->
+                <template x-if="log.exercises && log.exercises.length > 0">
+                  <div style="margin-top:10px;border-top:1px solid #F0EFE9;padding-top:8px">
+                    <table style="width:100%;border-collapse:collapse;font-size:12px">
+                      <thead>
+                        <tr style="color:#ABAAA5">
+                          <th style="text-align:left;padding:2px 0;font-weight:500">Exercise</th>
+                          <th style="text-align:center;padding:2px 8px;font-weight:500">Sets</th>
+                          <th style="text-align:center;padding:2px 8px;font-weight:500">Reps</th>
+                          <th style="text-align:center;padding:2px 8px;font-weight:500">kg</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="ex in log.exercises" :key="ex.id">
+                          <tr style="border-top:1px solid #F0EFE9">
+                            <td style="padding:4px 0;font-weight:500;color:#1A1917" x-text="ex.exercise_name"></td>
+                            <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.sets || '—'"></td>
+                            <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.reps || '—'"></td>
+                            <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.weight_kg != null ? ex.weight_kg : '—'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+              </div>
             </template>
           </div>
 
@@ -238,71 +413,66 @@
       </template>
     </div>
 
-    <!-- ── HISTORY TAB ── -->
-    <div x-show="tab==='history'">
-      <template x-if="loadingLogs">
-        <div class="card" style="text-align:center;padding:48px;color:#ABAAA5">
-          <div class="spinner" style="width:24px;height:24px;margin:0 auto 12px"></div>
-          <p style="font-size:13.5px">Loading history…</p>
-        </div>
-      </template>
-
-      <template x-if="!loadingLogs && logs.length === 0">
-        <div class="card" style="text-align:center;padding:48px;color:#ABAAA5">
-          <p style="font-size:14px">No workouts logged yet.</p>
-          <p style="font-size:13px;margin-top:6px">Click "Log Workout" or tell the Telegram bot what you did.</p>
-        </div>
-      </template>
-
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <template x-for="log in logs" :key="log.id">
-          <div class="history-item">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-              <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-                  <span style="font-size:12.5px;font-weight:600;color:#1A1917" x-text="fmtLogDate(log.log_date)"></span>
-                  <span class="cat-badge" :class="'cat-' + (log.category || 'mixed')" x-text="(log.category || 'mixed').replace('_',' ')"></span>
-                  <span style="font-size:11.5px;color:#ABAAA5" x-text="log.source === 'telegram' ? '📱 via Telegram' : '💻 via Web'"></span>
-                </div>
-                <div style="font-size:13px;color:#4A4940;line-height:1.5" x-text="log.raw_text"></div>
-                <template x-if="log.summary && log.summary !== log.raw_text">
-                  <div style="font-size:12px;color:#78776E;margin-top:6px;font-style:italic" x-text="log.summary"></div>
-                </template>
-              </div>
-            </div>
-          </div>
-        </template>
-      </div>
-    </div>
-
   </main>
 </div>
 
-<!-- Log Workout Modal -->
+<!-- ══ LOG WORKOUT MODAL ══════════════════════════════════════════ -->
 <div x-show="showLogModal" x-cloak
-  style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"
+  style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto"
   @click.self="showLogModal=false">
-  <div class="card" style="width:100%;max-width:480px;padding:24px" @keydown.escape.window="showLogModal=false">
+  <div class="card" style="width:100%;max-width:520px;padding:24px" @keydown.escape.window="showLogModal=false">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
       <h2 style="font-size:16px;font-weight:600">Log Workout</h2>
       <button @click="showLogModal=false" style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:18px">✕</button>
     </div>
 
+    <!-- Free text -->
     <div style="margin-bottom:14px">
-      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">What did you do? <span style="color:#ABAAA5">(free text — AI will classify it)</span></label>
-      <textarea
-        x-model="logText"
-        class="input log-area"
-        placeholder="e.g. ran 5km in 28 min, then 3 sets of push-ups and pull-ups"
-        @keydown.meta.enter="submitLog()"
-        @keydown.ctrl.enter="submitLog()"
-      ></textarea>
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">
+        What did you do? <span style="color:#ABAAA5">(AI will classify it)</span>
+      </label>
+      <textarea x-model="logText" class="input log-area"
+        placeholder="e.g. ran 5km in 28 min, then 3 sets of push-ups"
+        @keydown.meta.enter="submitLog()" @keydown.ctrl.enter="submitLog()"></textarea>
       <div style="font-size:11.5px;color:#ABAAA5;margin-top:4px">⌘↵ or Ctrl↵ to submit</div>
     </div>
 
-    <div style="margin-bottom:18px">
+    <!-- Date -->
+    <div style="margin-bottom:16px">
       <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Date</label>
       <input type="date" x-model="logDate" class="input" style="width:auto" />
+    </div>
+
+    <!-- Structured exercises -->
+    <div style="margin-bottom:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940">Exercises <span style="color:#ABAAA5">(optional)</span></label>
+        <button type="button" @click="addExerciseRow()" class="btn btn-secondary" style="font-size:11.5px;padding:4px 10px">+ Add row</button>
+      </div>
+      <template x-if="logExercises.length > 0">
+        <div>
+          <div style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px">
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;padding:0 2px">Name</div>
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Sets</div>
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Reps</div>
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">kg</div>
+            <div></div>
+          </div>
+          <template x-for="(ex, i) in logExercises" :key="i">
+            <div style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px;align-items:center">
+              <input type="text"   x-model="logExercises[i].exercise_name" class="ex-input" placeholder="Bench Press" />
+              <input type="number" x-model.number="logExercises[i].sets"      class="ex-input" placeholder="3"    min="1"   style="text-align:center" />
+              <input type="text"   x-model="logExercises[i].reps"             class="ex-input" placeholder="8–10"           style="text-align:center" />
+              <input type="number" x-model.number="logExercises[i].weight_kg" class="ex-input" placeholder="60"   step="0.5" style="text-align:center" />
+              <button type="button" @click="logExercises.splice(i,1)"
+                style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:15px;line-height:1;padding:0;text-align:center">✕</button>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template x-if="logExercises.length === 0">
+        <div style="font-size:12px;color:#ABAAA5;padding:4px 0">Add rows to track sets, reps &amp; weight — used in the intensity chart.</div>
+      </template>
     </div>
 
     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -315,9 +485,92 @@
   </div>
 </div>
 
+<!-- ══ EDIT WORKOUT MODAL ══════════════════════════════════════════ -->
+<div x-show="showEditModal" x-cloak
+  style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto"
+  @click.self="showEditModal=false">
+  <div class="card" style="width:100%;max-width:520px;padding:24px" @keydown.escape.window="showEditModal=false">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 style="font-size:16px;font-weight:600">Edit Workout</h2>
+      <button @click="showEditModal=false" style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:18px">✕</button>
+    </div>
+
+    <!-- Free text -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">
+        Description <span style="color:#ABAAA5">(AI will re-classify on save)</span>
+      </label>
+      <textarea x-model="editText" class="input log-area"></textarea>
+    </div>
+
+    <!-- Date -->
+    <div style="margin-bottom:16px">
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Date</label>
+      <input type="date" x-model="editDate" class="input" style="width:auto" />
+    </div>
+
+    <!-- Exercises -->
+    <div style="margin-bottom:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940">Exercises</label>
+        <button type="button" @click="addEditExerciseRow()" class="btn btn-secondary" style="font-size:11.5px;padding:4px 10px">+ Add row</button>
+      </div>
+      <template x-if="editExercises.filter(e => !e._delete).length > 0">
+        <div>
+          <div style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px">
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;padding:0 2px">Name</div>
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Sets</div>
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Reps</div>
+            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">kg</div>
+            <div></div>
+          </div>
+          <template x-for="(ex, i) in editExercises" :key="i">
+            <div x-show="!ex._delete" style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px;align-items:center">
+              <input type="text"   x-model="editExercises[i].exercise_name" class="ex-input" placeholder="Bench Press" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
+              <input type="number" x-model.number="editExercises[i].sets"      class="ex-input" placeholder="3"    min="1"    style="text-align:center" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
+              <input type="text"   x-model="editExercises[i].reps"             class="ex-input" placeholder="8–10"             style="text-align:center" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
+              <input type="number" x-model.number="editExercises[i].weight_kg" class="ex-input" placeholder="60"   step="0.5"  style="text-align:center" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
+              <button type="button" @click="editExercises[i]._delete = true"
+                style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:15px;line-height:1;padding:0;text-align:center">✕</button>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template x-if="editExercises.filter(e => !e._delete).length === 0">
+        <div style="font-size:12px;color:#ABAAA5;padding:4px 0">No exercises — click "+ Add row" to add some.</div>
+      </template>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button @click="showEditModal=false" class="btn btn-secondary">Cancel</button>
+      <button @click="saveEdit()" class="btn btn-primary" :disabled="!editText.trim() || editSubmitting">
+        <span x-show="editSubmitting" class="spinner"></span>
+        <span x-show="!editSubmitting">Save</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/js/app.js"></script>
 <script>
+// Returns YYYY-MM-DD in the browser's LOCAL timezone (avoids UTC toISOString() off-by-one)
+function _localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function workoutApp() {
+  let _chart = null; // single chart instance, outside Alpine's reactive scope
+
+  const CAT = {
+    cardio:      { bg: '#DBEAFE', fg: '#1D4ED8' },
+    upper_body:  { bg: '#FCE7F3', fg: '#9D174D' },
+    lower_body:  { bg: '#D1FAE5', fg: '#065F46' },
+    core:        { bg: '#FEF3C7', fg: '#92400E' },
+    flexibility: { bg: '#EDE9FE', fg: '#4C1D95' },
+    mixed:       { bg: '#E0F2FE', fg: '#075985' },
+    rest:        { bg: '#F3F4F6', fg: '#6B7280' },
+  };
+
   return {
     username: '',
     tab: 'plan',
@@ -325,127 +578,306 @@ function workoutApp() {
     logs: [],
     loadingPlan: true,
     loadingLogs: false,
+    logsLoaded: false,
     generating: false,
     submitting: false,
     showLogModal: false,
     logText: '',
-    logDate: new Date().toISOString().slice(0, 10),
+    logDate: _localDateStr(),
+    logExercises: [],
     expandedDay: null,
     toast: '',
     _toastTimer: null,
+    insights: null,
+    loadingInsights: false,
+    // edit / delete state
+    showEditModal: false,
+    editingLog: null,
+    editText: '',
+    editDate: '',
+    editExercises: [],
+    editSubmitting: false,
+    deletingId: null,
+
+    // Category legend — array of objects so x-for can reference properties directly
+    catLegend: Object.keys(CAT).map(name => ({ name })),
 
     days: (() => {
-      const names = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+      const names  = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
       const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-      const todayIdx = (new Date().getDay() + 6) % 7; // 0=Mon
+      const todayIdx = (new Date().getDay() + 6) % 7;
       return names.map((k, i) => ({ key: k, label: labels[i], isToday: i === todayIdx }));
     })(),
 
     get weekLabel() {
       const today = new Date();
-      const mon = new Date(today);
-      mon.setDate(today.getDate() - (today.getDay() + 6) % 7);
-      const sun = new Date(mon);
-      sun.setDate(mon.getDate() + 6);
+      const mon = new Date(today); mon.setDate(today.getDate() - (today.getDay() + 6) % 7);
+      const sun = new Date(mon);   sun.setDate(mon.getDate() + 6);
       const fmt = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       return `Week of ${fmt(mon)} – ${fmt(sun)}`;
     },
 
     async init() {
       requireAuth();
-      const token = API.token();
-      try {
-        const me = await API.get('/users/me');
-        this.username = me.username || '';
-      } catch {}
+      try { const me = await API.get('/users/me'); this.username = me.username || ''; } catch {}
       await this.loadPlan();
+    },
+
+    async switchTab(t) {
+      this.tab = t;
+      if (t === 'workouts' && !this.logsLoaded) {
+        await this.loadLogs();
+      }
+      if (t === 'workouts') {
+        setTimeout(() => this.initChart(), 80);
+      }
     },
 
     async loadPlan() {
       this.loadingPlan = true;
-      try {
-        this.plan = await API.get('/workout/plan');
-      } catch {
-        this.plan = null;
-      } finally {
-        this.loadingPlan = false;
-      }
+      try   { this.plan = await API.get('/workout/plan'); }
+      catch { this.plan = null; }
+      finally { this.loadingPlan = false; }
     },
 
     async loadLogs() {
       if (this.loadingLogs) return;
       this.loadingLogs = true;
       try {
-        this.logs = await API.get('/workout/logs?limit=50');
-      } catch {
-        this.logs = [];
-      } finally {
-        this.loadingLogs = false;
-      }
+        this.logs = await API.get('/workout/logs?limit=200');
+        this.logsLoaded = true;
+      } catch { this.logs = []; }
+      finally { this.loadingLogs = false; }
     },
 
-    dayPlan(key) {
-      return this.plan?.plan?.[key] || null;
-    },
+    dayPlan(key) { return this.plan?.plan?.[key] || null; },
 
     isRestDay(key) {
       const dp = this.dayPlan(key);
-      if (!dp) return false;
-      const focus = (dp.focus || '').toLowerCase();
-      return focus.includes('rest') || (dp.exercises || []).length === 0;
+      return dp ? (dp.focus || '').toLowerCase().includes('rest') || (dp.exercises || []).length === 0 : false;
     },
 
-    toggleDay(key) {
-      this.expandedDay = this.expandedDay === key ? null : key;
-    },
+    toggleDay(key) { this.expandedDay = this.expandedDay === key ? null : key; },
 
     async generatePlan() {
       if (this.generating) return;
       this.generating = true;
       try {
         this.plan = await API.post('/workout/plan/generate', {});
-        this.showToast('✨ AI workout plan generated for this week!');
+        this.showToast('✨ AI workout plan generated!');
         this.tab = 'plan';
-      } catch (e) {
-        this.showToast('Failed to generate plan: ' + e.message);
-      } finally {
-        this.generating = false;
-      }
+      } catch (e) { this.showToast('Failed to generate: ' + e.message); }
+      finally { this.generating = false; }
     },
 
     openLogModal() {
       this.logText = '';
-      this.logDate = new Date().toISOString().slice(0, 10);
+      this.logDate = _localDateStr();
+      this.logExercises = [];
       this.showLogModal = true;
+    },
+
+    addExerciseRow() {
+      this.logExercises.push({ exercise_name: '', sets: null, reps: '', weight_kg: null });
     },
 
     async submitLog() {
       if (!this.logText.trim() || this.submitting) return;
       this.submitting = true;
       try {
-        await API.post('/workout/logs', {
+        const log = await API.post('/workout/logs', {
           raw_text: this.logText.trim(),
           log_date: this.logDate || null,
           source: 'web',
         });
+        for (const ex of this.logExercises.filter(e => e.exercise_name.trim())) {
+          await API.post(`/workout/logs/${log.id}/exercises`, {
+            exercise_name: ex.exercise_name.trim(),
+            sets: ex.sets || null,
+            reps: ex.reps.trim() || null,
+            weight_kg: ex.weight_kg || null,
+          });
+        }
         this.showLogModal = false;
         this.showToast('💪 Workout logged!');
-        if (this.tab === 'history') await this.loadLogs();
-      } catch (e) {
-        this.showToast('Error: ' + e.message);
-      } finally {
-        this.submitting = false;
-      }
+        this.logsLoaded = false;
+        if (this.tab === 'workouts') {
+          await this.loadLogs();
+          setTimeout(() => this.initChart(), 80);
+        }
+      } catch (e) { this.showToast('Error: ' + e.message); }
+      finally { this.submitting = false; }
     },
+
+    openEdit(log) {
+      this.editingLog = log;
+      this.editText = log.raw_text;
+      this.editDate = log.log_date;
+      // Existing exercises are read-only (name/sets/reps/kg greyed out); only deletable
+      this.editExercises = (log.exercises || []).map(e => ({ ...e, _isNew: false, _delete: false }));
+      this.showEditModal = true;
+    },
+
+    addEditExerciseRow() {
+      this.editExercises.push({ exercise_name: '', sets: null, reps: '', weight_kg: null, _isNew: true, _delete: false });
+    },
+
+    async saveEdit() {
+      if (!this.editText.trim() || this.editSubmitting) return;
+      this.editSubmitting = true;
+      try {
+        await API.patch(`/workout/logs/${this.editingLog.id}`, {
+          raw_text: this.editText.trim(),
+          log_date: this.editDate || null,
+        });
+        // Delete exercises marked for removal
+        for (const ex of this.editExercises.filter(e => !e._isNew && e._delete)) {
+          await API.delete(`/workout/logs/${this.editingLog.id}/exercises/${ex.id}`);
+        }
+        // Add new exercises
+        for (const ex of this.editExercises.filter(e => e._isNew && !e._delete && e.exercise_name.trim())) {
+          await API.post(`/workout/logs/${this.editingLog.id}/exercises`, {
+            exercise_name: ex.exercise_name.trim(),
+            sets: ex.sets || null,
+            reps: ex.reps.trim() || null,
+            weight_kg: ex.weight_kg || null,
+          });
+        }
+        this.showEditModal = false;
+        this.showToast('✅ Workout updated!');
+        this.logsLoaded = false;
+        await this.loadLogs();
+        setTimeout(() => this.initChart(), 80);
+      } catch (e) { this.showToast('Error: ' + e.message); }
+      finally { this.editSubmitting = false; }
+    },
+
+    async deleteLog(id) {
+      try {
+        await API.delete(`/workout/logs/${id}`);
+        this.logs = this.logs.filter(l => l.id !== id);
+        this.deletingId = null;
+        this.showToast('🗑️ Workout deleted.');
+        setTimeout(() => this.initChart(), 80);
+      } catch (e) { this.showToast('Error: ' + e.message); }
+    },
+
+    async loadInsights() {
+      if (this.loadingInsights) return;
+      this.loadingInsights = true;
+      try   { this.insights = await API.get('/workout/insights'); }
+      catch (e) { this.showToast('Insights failed: ' + e.message); }
+      finally { this.loadingInsights = false; }
+    },
+
+    // ── Chart ──────────────────────────────────────────────────────
+
+    initChart() {
+      if (typeof Chart === 'undefined' || this.logs.length === 0) return;
+      const el = document.getElementById('chartIntensity');
+      if (!el) return;
+
+      if (_chart) { _chart.destroy(); _chart = null; }
+
+      // Take last 20 sessions, oldest-first for left-to-right timeline
+      const sessions = [...this.logs].slice(0, 20).reverse();
+
+      const labels    = sessions.map(l => this.fmtLogDate(l.log_date));
+      const totalSets = sessions.map(l =>
+        l.exercises && l.exercises.length > 0
+          ? l.exercises.reduce((s, e) => s + (e.sets || 0), 0)
+          : 1  // session happened but no structured data — mark with 1
+      );
+      const maxWeight = sessions.map(l => {
+        if (!l.exercises || l.exercises.length === 0) return null;
+        const weights = l.exercises.map(e => e.weight_kg).filter(w => w != null);
+        return weights.length ? Math.max(...weights) : null;
+      });
+      const barColors = sessions.map(l => (CAT[l.category] || CAT.mixed).bg);
+      const barBorders = sessions.map(l => (CAT[l.category] || CAT.mixed).fg);
+
+      _chart = new Chart(el, {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Total Sets',
+              data: totalSets,
+              backgroundColor: barColors,
+              borderColor: barBorders,
+              borderWidth: 1.5,
+              borderRadius: 5,
+              yAxisID: 'ySets',
+              order: 2,
+            },
+            {
+              type: 'line',
+              label: 'Max Weight (kg)',
+              data: maxWeight,
+              borderColor: '#1A1917',
+              backgroundColor: 'transparent',
+              pointBackgroundColor: '#1A1917',
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              tension: 0.35,
+              spanGaps: true,       // connect across sessions with no weight data
+              yAxisID: 'yKg',
+              order: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'end',
+              labels: { font: { size: 11, family: 'Inter' }, boxWidth: 12, padding: 12 },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  if (ctx.dataset.label === 'Total Sets') return ` ${ctx.parsed.y} sets`;
+                  if (ctx.parsed.y != null)                return ` ${ctx.parsed.y} kg (max)`;
+                  return null;
+                },
+              },
+            },
+          },
+          scales: {
+            ySets: {
+              position: 'left',
+              beginAtZero: true,
+              ticks: { stepSize: 1, precision: 0, font: { size: 11 } },
+              title: { display: true, text: 'Sets', font: { size: 11 } },
+              grid: { color: '#F0EFE9' },
+            },
+            yKg: {
+              position: 'right',
+              beginAtZero: true,
+              ticks: { font: { size: 11 } },
+              title: { display: true, text: 'Max kg', font: { size: 11 } },
+              grid: { display: false },
+            },
+            x: {
+              ticks: { font: { size: 11 }, maxRotation: 40 },
+              grid: { display: false },
+            },
+          },
+        },
+      });
+    },
+
+    // ── Helpers ────────────────────────────────────────────────────
 
     fmtLogDate(iso) {
       if (!iso) return '';
-      const d = new Date(iso + 'T00:00:00');
-      const today = new Date();
-      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-      if (iso === today.toISOString().slice(0,10)) return 'Today';
-      if (iso === yesterday.toISOString().slice(0,10)) return 'Yesterday';
-      return d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+      const yest = new Date(); yest.setDate(yest.getDate() - 1);
+      if (iso === _localDateStr())     return 'Today';
+      if (iso === _localDateStr(yest)) return 'Yesterday';
+      return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     },
 
     showToast(msg) {
