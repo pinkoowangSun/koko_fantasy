@@ -1,6 +1,6 @@
 """Internal endpoints used exclusively by the Telegram bot, secured with BOT_API_KEY."""
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone as _tz
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +22,27 @@ from app.services.ai_service import detect_intent, generate_briefing, parse_work
 from app.services.rag_service import extract_text, index_document, query_and_answer
 
 router = APIRouter(prefix="/bot", tags=["bot"])
+
+
+def _parse_remind_at(s: str) -> datetime:
+    """Parse any ISO 8601 datetime string and return a naive UTC datetime for DB storage."""
+    s = s.strip().replace("Z", "+00:00")
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(_tz.utc).replace(tzinfo=None)
+    return dt
+
+
+def _fmt_remind_at(dt_utc: datetime, tz_str: str | None) -> str:
+    """Format a UTC naive datetime in the user's local timezone (falls back to UTC)."""
+    try:
+        if tz_str and tz_str != "UTC":
+            from zoneinfo import ZoneInfo
+            dt_local = dt_utc.replace(tzinfo=_tz.utc).astimezone(ZoneInfo(tz_str))
+            return dt_local.strftime("%b %d at %I:%M %p %Z")
+    except Exception:
+        pass
+    return dt_utc.strftime("%b %d at %H:%M UTC")
 
 
 async def _bot_auth(x_bot_key: str = Header(...)):
@@ -63,7 +84,15 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
     memory_items = (await db.execute(
         select(MemoryItem).where(MemoryItem.user_id == user.id).limit(20)
     )).scalars().all()
-    ctx = "; ".join(f"{m.key}: {m.value}" for m in memory_items)
+
+    # Provide current UTC time and user's timezone so the AI can correctly compute remind_at
+    now_utc = datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    ctx_parts = [
+        f"current_time_utc: {now_utc}",
+        f"user_timezone: {user.timezone or 'UTC'}",
+    ]
+    ctx_parts.extend(f"{m.key}: {m.value}" for m in memory_items)
+    ctx = "; ".join(ctx_parts)
 
     return await detect_intent(user.id, body.message, ctx)
 
@@ -87,8 +116,11 @@ async def bot_create_task(body: BotTaskCreate, db: AsyncSession = Depends(get_db
     reminder_at = None
     if body.due_date:
         try:
-            due_date = datetime.fromisoformat(body.due_date)
-            reminder_at = due_date - timedelta(days=1)
+            due_date = _parse_remind_at(body.due_date)
+            # Remind 30 min before due time — but only if that moment is still in the future
+            candidate = due_date - timedelta(minutes=30)
+            if candidate > datetime.utcnow():
+                reminder_at = candidate
         except ValueError:
             pass
 
@@ -162,6 +194,34 @@ async def bot_complete_task(body: BotCompleteTask, db: AsyncSession = Depends(ge
     task.updated_at = datetime.utcnow()
     await db.commit()
     return {"ok": True, "title": task.title}
+
+
+# ── Reminders ─────────────────────────────────────────────────────────────────
+
+class BotReminderCreate(BaseModel):
+    telegram_id: int
+    message: str
+    remind_at: str  # ISO 8601 datetime (with offset so we can convert to UTC)
+
+
+@router.post("/reminders", dependencies=[Depends(_bot_auth)])
+async def bot_create_reminder(body: BotReminderCreate, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+
+    try:
+        remind_at_utc = _parse_remind_at(body.remind_at)
+    except (ValueError, AttributeError) as exc:
+        raise HTTPException(400, f"Invalid remind_at datetime: {exc}")
+
+    if remind_at_utc <= datetime.utcnow():
+        raise HTTPException(400, "Reminder time must be in the future")
+
+    reminder = Reminder(user_id=user.id, message=body.message, remind_at=remind_at_utc)
+    db.add(reminder)
+    await db.commit()
+
+    fmt = _fmt_remind_at(remind_at_utc, user.timezone)
+    return {"ok": True, "remind_at": remind_at_utc.isoformat(), "formatted": fmt}
 
 
 # ── Journal ───────────────────────────────────────────────────────────────────

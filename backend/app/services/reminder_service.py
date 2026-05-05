@@ -1,3 +1,4 @@
+import logging
 import httpx
 from datetime import date, datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -7,35 +8,42 @@ from app.models.reminder import Reminder
 from app.models.user import User
 from app.models.workout import WorkoutPlan
 
+log = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 
 async def _send_telegram(telegram_id: int, text: str):
     from app.config import settings
     async with httpx.AsyncClient(timeout=10) as client:
-        await client.post(
+        resp = await client.post(
             f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": telegram_id, "text": text},
+            json={"chat_id": telegram_id, "text": text, "parse_mode": "Markdown"},
         )
+        resp.raise_for_status()
 
 
 async def check_and_send_reminders():
     now = datetime.utcnow()
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Reminder, User)
-            .join(User, Reminder.user_id == User.id)
-            .where(Reminder.sent.is_(False))
-            .where(Reminder.remind_at <= now)
-        )
-        rows = result.all()
-        for reminder, user in rows:
-            try:
-                await _send_telegram(user.telegram_id, f"⏰ Reminder: {reminder.message}")
-                reminder.sent = True
-            except Exception as exc:
-                print(f"[reminder] failed to send #{reminder.id}: {exc}")
-        await db.commit()
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Reminder, User)
+                .join(User, Reminder.user_id == User.id)
+                .where(Reminder.sent.is_(False))
+                .where(Reminder.remind_at <= now)
+            )
+            rows = result.all()
+            for reminder, user in rows:
+                try:
+                    await _send_telegram(user.telegram_id, f"⏰ *Reminder*\n{reminder.message}")
+                    reminder.sent = True
+                    log.info("[reminders] sent #%d to telegram_id=%s", reminder.id, user.telegram_id)
+                except Exception as exc:
+                    log.error("[reminders] failed to send #%d: %s", reminder.id, exc)
+            if rows:
+                await db.commit()
+    except Exception as exc:
+        log.error("[reminders] check_and_send_reminders crashed: %s", exc)
 
 
 async def send_workout_reminders():
@@ -96,11 +104,15 @@ async def send_workout_reminders():
 
 
 def start_scheduler():
-    scheduler.add_job(check_and_send_reminders, "interval", minutes=1, id="reminders")
-    scheduler.add_job(send_workout_reminders, "cron", hour=8, minute=0, id="workout_reminders")
+    scheduler.add_job(check_and_send_reminders, "interval", minutes=1, id="reminders",
+                      misfire_grace_time=30)
+    scheduler.add_job(send_workout_reminders, "cron", hour=8, minute=0, id="workout_reminders",
+                      misfire_grace_time=300)
     scheduler.start()
+    log.info("[scheduler] started — reminders every 1 min, workout briefing at 08:00 UTC")
 
 
 def stop_scheduler():
     if scheduler.running:
         scheduler.shutdown(wait=False)
+    log.info("[scheduler] stopped")

@@ -17,14 +17,15 @@ a JSON object with exactly these fields:
 
 {
   "intent": "<one of: chat | add_task | list_tasks | complete_task | add_journal | \
-read_journal | query_doc | briefing | add_memory | search | log_workout | view_workout_plan | generate_workout_plan>",
+read_journal | query_doc | briefing | add_memory | search | log_workout | view_workout_plan | \
+generate_workout_plan | add_reminder>",
   "data": { <extracted fields depending on intent> },
   "response": "<your friendly natural-language reply to the user>"
 }
 
 Intent extraction rules:
 - add_task: extract title (required), description, priority (low/medium/high/urgent, default medium), \
-due_date (ISO 8601 if mentioned, else null), tags (list of strings)
+due_date (ISO 8601 UTC datetime if mentioned, else null), tags (list of strings)
 - complete_task: extract title (the task name to mark done)
 - add_journal: extract content (required), mood (optional emoji or word), \
 entry_date (ISO date, today if not specified)
@@ -36,7 +37,15 @@ entry_date (ISO date, today if not specified)
 log_date (ISO date, today if not specified)
 - view_workout_plan: no data fields needed (user wants to see today's or this week's plan)
 - generate_workout_plan: no data fields needed (user wants AI to create a new weekly plan)
+- add_reminder: extract message (what to remind about, required — the full reminder content), \
+remind_at (required — ISO 8601 datetime with UTC offset, e.g. "2026-05-05T21:00:00+08:00"; \
+use current_time_utc and user_timezone from the context to convert the user's stated local time \
+to the correct offset; if no time mentioned, set to 1 hour from current_time_utc)
 - chat / list_tasks / read_journal: no special extraction needed
+
+Reminder triggers — use add_reminder when user wants to be alerted at a specific time: \
+"remind me to…", "set a reminder for…", "alert me at…", "ping me at…", "remind me later", \
+"notify me when…". This is DISTINCT from add_task: reminders fire once at a time, tasks track work.
 
 Workout-related triggers — use log_workout when the user mentions any physical activity \
 (ran, walked, lifted, gym, workout, exercise, pushups, squats, etc.). \
