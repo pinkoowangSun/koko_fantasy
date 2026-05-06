@@ -34,6 +34,28 @@ from app.services.rag_service import extract_text, index_document, query_and_ans
 router = APIRouter(prefix="/bot", tags=["bot"])
 
 
+# ── Timezone helpers ──────────────────────────────────────────────────────────
+
+def _local_date(user: User) -> date:
+    """Return today's date in the user's local timezone (falls back to UTC)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(user.timezone or "UTC")).date()
+    except Exception:
+        return date.today()
+
+
+def _fmt_date(dt_utc: datetime, tz_str: Optional[str]) -> str:
+    """Format a naive UTC datetime as a local date string (no time component)."""
+    try:
+        if tz_str and tz_str != "UTC":
+            from zoneinfo import ZoneInfo
+            return dt_utc.replace(tzinfo=_tz.utc).astimezone(ZoneInfo(tz_str)).strftime("%b %d")
+    except Exception:
+        pass
+    return dt_utc.strftime("%b %d")
+
+
 # ── Auth + user helpers ───────────────────────────────────────────────────────
 
 def _parse_dt(s: str) -> datetime:
@@ -198,7 +220,7 @@ async def _handle_update_task(data: dict, user: User, db: AsyncSession) -> dict:
 
 
 async def _handle_create_journal(data: dict, user: User, db: AsyncSession) -> dict:
-    entry_date = date.today()
+    entry_date = _local_date(user)
     if data.get("entry_date"):
         try:
             entry_date = date.fromisoformat(data["entry_date"])
@@ -242,7 +264,7 @@ async def _handle_delete_journal(data: dict, user: User, db: AsyncSession) -> di
 
 
 async def _handle_create_workout(data: dict, user: User, db: AsyncSession) -> dict:
-    log_date = date.today()
+    log_date = _local_date(user)
     if data.get("log_date"):
         try:
             log_date = date.fromisoformat(data["log_date"])
@@ -338,9 +360,9 @@ async def _handle_list_tasks(user: User, db: AsyncSession) -> dict:
         due_str = ""
         if t.due_date:
             if t.due_date < now:
-                due_str = f" ⚠ overdue ({t.due_date.strftime('%b %d')})"
+                due_str = f" ⚠ overdue ({_fmt_date(t.due_date, user.timezone)})"
             else:
-                due_str = f" — due {t.due_date.strftime('%b %d')}"
+                due_str = f" — due {_fmt_date(t.due_date, user.timezone)}"
         pri = {"urgent": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(t.priority, "")
         lines.append(f"{pri} {t.title}{due_str}")
     return {"response": "\n".join(lines), "data": {"tasks": [{"id": t.id, "title": t.title} for t in tasks]}}
@@ -369,7 +391,7 @@ async def _handle_read_journal(data: dict, user: User, db: AsyncSession) -> dict
 
 
 async def _handle_read_workout_plan(user: User, db: AsyncSession) -> dict:
-    today = date.today()
+    today = _local_date(user)
     ws = today - timedelta(days=today.weekday())
     day_name = today.strftime("%A").lower()
 
@@ -418,7 +440,8 @@ async def _handle_read_workout_plan(user: User, db: AsyncSession) -> dict:
 
 
 async def _handle_generate_workout_plan(user: User, db: AsyncSession) -> dict:
-    four_weeks_ago = date.today() - timedelta(weeks=4)
+    today_local = _local_date(user)
+    four_weeks_ago = today_local - timedelta(weeks=4)
     logs = (await db.execute(
         select(WorkoutLog)
         .where(WorkoutLog.user_id == user.id, WorkoutLog.log_date >= four_weeks_ago)
@@ -438,7 +461,7 @@ async def _handle_generate_workout_plan(user: User, db: AsyncSession) -> dict:
 
     result = await generate_workout_plan(user.id, logs_context, user_memory, workout_pref)
 
-    ws = date.today() - timedelta(days=date.today().weekday())
+    ws = today_local - timedelta(days=today_local.weekday())
     existing = (await db.execute(
         select(WorkoutPlan).where(WorkoutPlan.user_id == user.id, WorkoutPlan.week_start == ws)
     )).scalar_one_or_none()
@@ -464,7 +487,7 @@ async def _handle_generate_workout_plan(user: User, db: AsyncSession) -> dict:
 
 
 async def _handle_generate_briefing(user: User, db: AsyncSession) -> dict:
-    today = date.today()
+    today = _local_date(user)
     now = datetime.utcnow()
 
     tasks = (await db.execute(
