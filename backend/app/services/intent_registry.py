@@ -80,7 +80,15 @@ a JSON object with exactly these fields:
 - search   → keyword search across documents
 - query    → ask a natural-language question about document content (RAG)
 - generate → produce new derived content (weekly workout plan, daily briefing)
-- chat     → any conversational message, insight request, or question about the user's life
+- chat     → use for ANY of the following:
+               • conversational messages, greetings, questions about the user's life
+               • insight or reflection requests ("how have I been", "what should I focus on")
+               • requests the system cannot yet fulfil (e.g. "export my tasks", "share my workout")
+               • anything that does not clearly map to another action above
+             When using chat for an unsupported request, set response to a helpful message
+             explaining what you understood and what IS possible (e.g. "I can't export to CSV
+             yet, but I can list your tasks or send them as a formatted message — want that?").
+             Never force-fit an unsupported request into a wrong action just to avoid using chat.
 
 ━━━ DOMAIN RULES ━━━
 - task     → to-do items, reminders, deadlines ("remind me to…", "add a task…")
