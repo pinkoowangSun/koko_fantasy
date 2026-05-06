@@ -1,6 +1,7 @@
 import logging
 import httpx
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone as _tz
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 from app.database import AsyncSessionLocal
@@ -10,6 +11,17 @@ from app.models.workout import WorkoutPlan
 
 log = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
+
+MORNING_HOUR = 8  # 8 AM in the user's local timezone
+
+
+def _local_now(tz_str: str | None) -> datetime:
+    """Return current time in the user's local timezone. Falls back to UTC."""
+    now_utc = datetime.now(_tz.utc)
+    try:
+        return now_utc.astimezone(ZoneInfo(tz_str or "UTC"))
+    except (ZoneInfoNotFoundError, Exception):
+        return now_utc
 
 
 async def _send_telegram(telegram_id: int, text: str):
@@ -47,17 +59,30 @@ async def check_and_send_reminders():
 
 
 async def send_workout_reminders():
-    today = date.today()
-    day_name = today.strftime("%A").lower()
-    week_start = today - timedelta(days=today.weekday())
-
+    """
+    Runs every minute. For each approved user, sends their morning workout
+    summary at exactly MORNING_HOUR:00 in *their* local timezone.
+    """
     async with AsyncSessionLocal() as db:
         users = (await db.execute(
-            select(User).where(User.telegram_id.isnot(None))
+            select(User).where(
+                User.telegram_id.isnot(None),
+                User.status == "approved",
+            )
         )).scalars().all()
 
         for user in users:
             try:
+                local_now = _local_now(user.timezone)
+
+                # Send only at the exact minute the user's local clock hits MORNING_HOUR:00
+                if local_now.hour != MORNING_HOUR:
+                    continue
+
+                local_today = local_now.date()
+                day_name = local_today.strftime("%A").lower()
+                week_start = local_today - timedelta(days=local_today.weekday())
+
                 plan_row = (await db.execute(
                     select(WorkoutPlan).where(
                         WorkoutPlan.user_id == user.id,
@@ -79,7 +104,11 @@ async def send_workout_reminders():
                 notes = day_plan.get("notes", "")
 
                 if not exercises or "rest" in focus.lower():
-                    msg = f"🌅 Good morning! Today is a rest day.\n💡 {notes}" if notes else "🌅 Good morning! Rest day today — recharge well."
+                    msg = (
+                        f"🌅 Good morning! Today is a rest day.\n💡 {notes}"
+                        if notes else
+                        "🌅 Good morning! Rest day today — recharge well."
+                    )
                 else:
                     lines = [f"💪 Good morning! Today's workout — *{focus}*"]
                     if warmup:
@@ -90,7 +119,10 @@ async def send_workout_reminders():
                         reps = ex.get("reps", "")
                         weight = ex.get("weight", "")
                         detail = f"{sets}×{reps}" if sets and reps else reps or sets
-                        weight_str = f" @ {weight}" if weight and weight not in ("bodyweight", "") else (" (bodyweight)" if weight == "bodyweight" else "")
+                        weight_str = (
+                            " (bodyweight)" if weight == "bodyweight"
+                            else f" @ {weight}" if weight else ""
+                        )
                         lines.append(f"  • {name}: {detail}{weight_str}")
                     if duration:
                         lines.append(f"⏱ ~{duration} min")
@@ -99,17 +131,20 @@ async def send_workout_reminders():
                     msg = "\n".join(lines)
 
                 await _send_telegram(user.telegram_id, msg)
+                log.info("[workout reminder] sent to user %d (tz=%s)", user.id, user.timezone)
+
             except Exception as exc:
-                print(f"[workout reminder] failed for user {user.id}: {exc}")
+                log.error("[workout reminder] failed for user %d: %s", user.id, exc)
 
 
 def start_scheduler():
     scheduler.add_job(check_and_send_reminders, "interval", minutes=1, id="reminders",
                       misfire_grace_time=30)
-    scheduler.add_job(send_workout_reminders, "cron", hour=8, minute=0, id="workout_reminders",
-                      misfire_grace_time=300)
+    # Run every minute so each user is checked against their own local time
+    scheduler.add_job(send_workout_reminders, "cron", minute=0, id="workout_reminders",
+                      misfire_grace_time=60)
     scheduler.start()
-    log.info("[scheduler] started — reminders every 1 min, workout briefing at 08:00 UTC")
+    log.info("[scheduler] started — reminders every 1 min, workout briefing at %02d:00 local per user", MORNING_HOUR)
 
 
 def stop_scheduler():
