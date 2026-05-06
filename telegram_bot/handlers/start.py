@@ -1,8 +1,23 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram_bot.handlers.api import api
 
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    # Infer timezone from Telegram language_code (only sets if still default UTC)
+    tz_note = ""
+    try:
+        result = await api("post", "/users/timezone", json={
+            "telegram_id": user.id,
+            "language_code": user.language_code,
+        })
+        if result.get("updated"):
+            tz_note = f"\n\n🌍 I've set your timezone to *{result['timezone']}* based on your language settings. You can change it anytime in your profile."
+    except Exception:
+        pass
+
     await update.message.reply_text(
         "👋 Hi! I'm *Koko*, your personal life assistant.\n\n"
         "*What I can do:*\n"
@@ -20,7 +35,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Log workout — /logworkout <what you did>\n"
         "• Generate AI plan — /genplan\n"
         "• Or just type: *\"I just ran 5km\"*\n\n"
-        "Just type anything to get started!",
+        "Just type anything to get started!" + tz_note,
         parse_mode="Markdown",
     )
 

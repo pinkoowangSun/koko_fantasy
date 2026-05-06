@@ -36,6 +36,67 @@ router = APIRouter(prefix="/bot", tags=["bot"])
 
 # ── Timezone helpers ──────────────────────────────────────────────────────────
 
+# Best-guess mapping from Telegram language_code → IANA timezone.
+# Only used when the user's timezone is still the default "UTC".
+_LANG_TO_TZ: dict[str, str] = {
+    # East Asia
+    "zh-cn": "Asia/Shanghai", "zh-tw": "Asia/Taipei", "zh-hk": "Asia/Hong_Kong",
+    "zh":    "Asia/Shanghai",
+    "ja":    "Asia/Tokyo",
+    "ko":    "Asia/Seoul",
+    # Southeast Asia
+    "vi":    "Asia/Ho_Chi_Minh",
+    "th":    "Asia/Bangkok",
+    "id":    "Asia/Jakarta",
+    "ms":    "Asia/Kuala_Lumpur",
+    "tl":    "Asia/Manila",
+    # South Asia
+    "hi":    "Asia/Kolkata",
+    "bn":    "Asia/Dhaka",
+    "ur":    "Asia/Karachi",
+    # West / Middle East
+    "ar":    "Asia/Riyadh",
+    "fa":    "Asia/Tehran",
+    "he":    "Asia/Jerusalem",
+    "tr":    "Europe/Istanbul",
+    # Europe
+    "en-gb": "Europe/London",
+    "de":    "Europe/Berlin",
+    "fr":    "Europe/Paris",
+    "es":    "Europe/Madrid",
+    "it":    "Europe/Rome",
+    "pt-br": "America/Sao_Paulo",
+    "pt":    "Europe/Lisbon",
+    "ru":    "Europe/Moscow",
+    "uk":    "Europe/Kiev",
+    "pl":    "Europe/Warsaw",
+    "nl":    "Europe/Amsterdam",
+    "sv":    "Europe/Stockholm",
+    "nb":    "Europe/Oslo",
+    "da":    "Europe/Copenhagen",
+    "fi":    "Europe/Helsinki",
+    "cs":    "Europe/Prague",
+    "ro":    "Europe/Bucharest",
+    "hu":    "Europe/Budapest",
+    "el":    "Europe/Athens",
+    # Americas
+    "en-us": "America/New_York",
+    "es-mx": "America/Mexico_City",
+    "es-ar": "America/Argentina/Buenos_Aires",
+    # Oceania
+    "en-au": "Australia/Sydney",
+    "en-nz": "Pacific/Auckland",
+}
+
+
+def _infer_timezone(language_code: str | None) -> str | None:
+    """Map a Telegram language_code to an IANA timezone string, or None if unknown."""
+    if not language_code:
+        return None
+    lc = language_code.lower()
+    return _LANG_TO_TZ.get(lc) or _LANG_TO_TZ.get(lc.split("-")[0])
+
+
 def _local_date(user: User) -> date:
     """Return today's date in the user's local timezone (falls back to UTC)."""
     try:
@@ -590,11 +651,21 @@ class IntentRequest(BaseModel):
     telegram_id: int
     username: Optional[str] = None
     message: str
+    language_code: Optional[str] = None
 
 
 @router.post("/intent", dependencies=[Depends(_bot_auth)])
 async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
     user = await _get_or_create_user(body.telegram_id, body.username, db)
+
+    # Auto-set timezone from language_code if still at default
+    if user.timezone == "UTC" and body.language_code:
+        inferred = _infer_timezone(body.language_code)
+        if inferred:
+            user.timezone = inferred
+            user.updated_at = datetime.utcnow()
+            await db.commit()
+            await db.refresh(user)
 
     # Build Phase 1 context
     memory_items = (await db.execute(
@@ -909,6 +980,38 @@ async def bot_media(
         ),
         "data": {},
     }
+
+
+# ── Timezone inference ────────────────────────────────────────────────────────
+
+class TimezoneInferRequest(BaseModel):
+    telegram_id: int
+    language_code: Optional[str] = None
+
+
+@router.post("/users/timezone", dependencies=[Depends(_bot_auth)])
+async def bot_infer_timezone(body: TimezoneInferRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Called on /start. Infers timezone from language_code and saves it only
+    if the user's timezone is still the default "UTC". Returns the resolved
+    timezone and whether it was updated.
+    """
+    result = await db.execute(select(User).where(User.telegram_id == body.telegram_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        return {"timezone": "UTC", "updated": False}
+
+    if user.timezone != "UTC":
+        return {"timezone": user.timezone, "updated": False}
+
+    inferred = _infer_timezone(body.language_code)
+    if not inferred:
+        return {"timezone": "UTC", "updated": False}
+
+    user.timezone = inferred
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+    return {"timezone": inferred, "updated": True}
 
 
 # ── User approval ─────────────────────────────────────────────────────────────

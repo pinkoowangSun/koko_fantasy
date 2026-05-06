@@ -19,6 +19,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "telegram_id": user.id,
             "username": user.username,
             "message": text,
+            "language_code": user.language_code,
         })
     except Exception as exc:
         await update.message.reply_text(f"⚠️ Couldn't reach the server: {exc}")
