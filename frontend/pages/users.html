@@ -23,7 +23,7 @@
     .status-rejected { background: #FEE2E2; color: #991B1B; }
     .user-row {
       display: grid;
-      grid-template-columns: 48px 1fr 110px 140px 130px;
+      grid-template-columns: 48px 1fr 110px 140px 160px 130px;
       align-items: center;
       gap: 12px;
       padding: 12px 16px;
@@ -114,6 +114,7 @@
         <div>User</div>
         <div>Status</div>
         <div>Joined</div>
+        <div>Timezone</div>
         <div>Actions</div>
       </div>
 
@@ -153,6 +154,9 @@
 
           <!-- Joined -->
           <div style="color:#78776E;font-size:13px" x-text="fmtDate(u.created_at)"></div>
+
+          <!-- Timezone -->
+          <div style="color:#78776E;font-size:12px;font-family:monospace" x-text="u.timezone || '—'"></div>
 
           <!-- Actions -->
           <div class="action-btns">
