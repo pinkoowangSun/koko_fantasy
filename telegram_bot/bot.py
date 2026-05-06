@@ -6,6 +6,7 @@ from telegram_bot.handlers.briefing import handle_briefing
 from telegram_bot.handlers.callback import handle_approval_callback
 from telegram_bot.handlers.chat import handle_message
 from telegram_bot.handlers.documents import handle_document
+from telegram_bot.handlers.media import handle_photo
 from telegram_bot.handlers.journal import handle_journal
 from telegram_bot.handlers.search import handle_search
 from telegram_bot.handlers.start import handle_help, handle_start
@@ -32,6 +33,9 @@ def main():
 
     # File uploads
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+
+    # Photo messages → media tier
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     # Free-text → intent router (must be last)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

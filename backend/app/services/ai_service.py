@@ -1,65 +1,64 @@
 import json
 from datetime import datetime
+from typing import Optional
+
 from openai import AsyncOpenAI
+from pydantic import BaseModel, ValidationError, model_validator
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.chat_history import ChatHistory
+from app.services.intent_registry import (
+    INTENT_SYSTEM_PROMPT,
+    VALID_ACTIONS,
+    VALID_DOMAINS,
+    VALID_SCOPES,
+)
 
 _client = AsyncOpenAI(
     api_key=settings.DEEPSEEK_API_KEY,
     base_url=settings.DEEPSEEK_BASE_URL,
 )
 
-INTENT_SYSTEM_PROMPT = """\
-You are Koko, a personal life management assistant. Analyze the user's message and return \
-a JSON object with exactly these fields:
 
-{
-  "intent": "<one of: chat | add_task | list_tasks | complete_task | add_journal | \
-read_journal | query_doc | briefing | add_memory | search | log_workout | view_workout_plan | \
-generate_workout_plan>",
-  "data": { <extracted fields depending on intent> },
-  "response": "<your friendly natural-language reply to the user>"
-}
+# ── Phase 1 response model ────────────────────────────────────────────────────
 
-Intent extraction rules:
-- add_task: extract title (required), description, priority (low/medium/high/urgent, default medium), \
-due_date (ISO 8601 datetime with UTC offset — the deadline for the task; \
-if the user mentions a date but no specific time, default the time to 23:59 of that day in user_timezone; \
-for "remind me to X at Y" or "remind me at Y" set due_date = Y converted to the correct UTC offset; \
-if no deadline mentioned set to null), \
-remind_at (ISO 8601 datetime with UTC offset — WHEN to send the notification; \
-ALWAYS set remind_at whenever the user mentions a specific time ("at 3pm", "remind me at …", \
-"ping me at …", "remind me 30 min before"); \
-for "remind me at Y" / "remind me to X at Y" set remind_at = Y (same as due_date); \
-for "remind me X min/hours before (due_date)" set remind_at = due_date minus that offset; \
-use current_time_utc and user_timezone from context to convert any local time to the correct offset; \
-if no reminder time is mentioned at all, set to null), \
-tags (list of strings). \
-Use add_task for ALL of these: "add a task", "remind me to X", "remember to X", "don't let me forget X", \
-"set a reminder for X at Y" — reminders are always attached to a task.
-- complete_task: extract title (the task name to mark done)
-- add_journal: extract content (required), mood (optional emoji or word), \
-entry_date (ISO date, today if not specified)
-- query_doc: extract question (the user's question about their documents)
-- briefing: no data fields needed
-- search: extract query (the search term)
-- add_memory: extract key, value, category (preference/fact/note, default general)
-- log_workout: extract raw_text (the full workout description verbatim), \
-log_date (ISO date, today if not specified)
-- view_workout_plan: no data fields needed (user wants to see today's or this week's plan)
-- generate_workout_plan: no data fields needed (user wants AI to create a new weekly plan)
-- chat / list_tasks / read_journal: no special extraction needed
+class Phase1Response(BaseModel):
+    action: str
+    domain: str = ""
+    context_scope: list[str] = []
+    data: dict = {}
+    response: str = ""
 
-Workout-related triggers — use log_workout when the user mentions any physical activity \
-(ran, walked, lifted, gym, workout, exercise, pushups, squats, etc.). \
-Use view_workout_plan when asking about their plan or today's exercise. \
-Use generate_workout_plan when asking to create or regenerate a plan.
+    @model_validator(mode="after")
+    def _validate_enums(self) -> "Phase1Response":
+        if self.action not in VALID_ACTIONS:
+            raise ValueError(f"unknown action: {self.action!r}")
+        if self.domain and self.domain not in VALID_DOMAINS:
+            self.domain = ""
+        self.context_scope = [s for s in self.context_scope if s in VALID_SCOPES]
+        return self
 
-Always output valid JSON only. No markdown fences.\
-"""
 
+_FALLBACK = Phase1Response(
+    action="chat",
+    domain="",
+    context_scope=[],
+    data={},
+    response="I'm not sure I understood that — could you rephrase?",
+)
+
+_RETRY_PROMPT = (
+    "Your previous response was invalid. "
+    "Return ONLY valid JSON matching this schema exactly:\n"
+    '{{"action": one of {actions}, "domain": one of {domains} or "", '
+    '"context_scope": list from {scopes}, "data": {{}}, "response": "string"}}'
+)
+
+
+# ── History helpers ───────────────────────────────────────────────────────────
 
 async def _get_recent_history(user_id: int, limit: int = 10) -> list[dict]:
     async with AsyncSessionLocal() as db:
@@ -73,14 +72,20 @@ async def _get_recent_history(user_id: int, limit: int = 10) -> list[dict]:
         return [{"role": r.role, "content": r.content} for r in reversed(rows)]
 
 
-async def _save_messages(user_id: int, user_msg: str, assistant_msg: str, source: str):
+async def _save_messages(user_id: int, user_msg: str, assistant_msg: str, source: str) -> None:
     async with AsyncSessionLocal() as db:
         db.add(ChatHistory(user_id=user_id, role="user", content=user_msg, source=source))
         db.add(ChatHistory(user_id=user_id, role="assistant", content=assistant_msg, source=source))
         await db.commit()
 
 
-async def detect_intent(user_id: int, message: str, user_context: str = "") -> dict:
+# ── Phase 1: classify intent ──────────────────────────────────────────────────
+
+async def classify_intent(user_id: int, message: str, user_context: str = "") -> Phase1Response:
+    """
+    Phase 1 LLM call: classify action + domain + context_scope.
+    Validates output with Pydantic; retries once on failure; falls back to safe default.
+    """
     history = await _get_recent_history(user_id, limit=6)
     system = INTENT_SYSTEM_PROMPT
     if user_context:
@@ -90,21 +95,98 @@ async def detect_intent(user_id: int, message: str, user_context: str = "") -> d
     messages.extend(history)
     messages.append({"role": "user", "content": message})
 
-    resp = await _client.chat.completions.create(
-        model=settings.DEEPSEEK_MODEL,
-        messages=messages,
-        temperature=0.2,
-        response_format={"type": "json_object"},
-    )
-    raw = resp.choices[0].message.content
+    raw = ""
     try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        result = {"intent": "chat", "data": {}, "response": raw}
+        resp = await _client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL,
+            messages=messages,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        raw = resp.choices[0].message.content
+        result = Phase1Response.model_validate(json.loads(raw))
+        await _save_messages(user_id, message, result.response, "telegram")
+        return result
 
-    await _save_messages(user_id, message, result.get("response", ""), "telegram")
-    return result
+    except (ValidationError, json.JSONDecodeError, ValueError):
+        # Retry once: send back the bad output with the schema
+        retry_hint = _RETRY_PROMPT.format(
+            actions=VALID_ACTIONS, domains=VALID_DOMAINS, scopes=VALID_SCOPES
+        )
+        retry_messages = messages + [
+            {"role": "assistant", "content": raw or ""},
+            {"role": "user", "content": retry_hint},
+        ]
+        try:
+            resp2 = await _client.chat.completions.create(
+                model=settings.DEEPSEEK_MODEL,
+                messages=retry_messages,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+            raw2 = resp2.choices[0].message.content
+            result = Phase1Response.model_validate(json.loads(raw2))
+            await _save_messages(user_id, message, result.response, "telegram")
+            return result
+        except Exception:
+            pass
 
+    fallback = _FALLBACK.model_copy()
+    await _save_messages(user_id, message, fallback.response, "telegram")
+    return fallback
+
+
+# ── Phase 2: contextual response ──────────────────────────────────────────────
+
+_PHASE2_SYSTEM = (
+    "You are Koko, a warm and insightful personal life management assistant. "
+    "Use the user's data provided below to give a specific, personalised response. "
+    "Reference actual data points — dates, task names, workout categories, moods. "
+    "Be concise but thorough. Proactively flag patterns or areas worth attention."
+)
+
+
+async def generate_contextual_response(
+    user_id: int,
+    message: str,
+    profile_summary: str,
+    rich_context: str,
+) -> str:
+    """
+    Phase 2 LLM call: generate a rich, data-aware conversational response.
+    Falls back to a generic reply if the call fails.
+    """
+    history = await _get_recent_history(user_id, limit=10)
+
+    context_block = ""
+    if profile_summary:
+        context_block += f"## User Profile Summary\n{profile_summary}\n\n"
+    if rich_context:
+        context_block += rich_context
+
+    system = _PHASE2_SYSTEM
+    if context_block:
+        system += f"\n\n{context_block}"
+
+    messages = [{"role": "system", "content": system}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": message})
+
+    try:
+        resp = await _client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL,
+            messages=messages,
+            temperature=0.7,
+        )
+        reply = resp.choices[0].message.content
+        await _save_messages(user_id, message, reply, "telegram")
+        return reply
+    except Exception as exc:
+        print(f"[ai] Phase 2 failed for user {user_id}: {exc}")
+        return "I'm having trouble pulling your data right now. Try again in a moment!"
+
+
+# ── Web chat (unchanged) ──────────────────────────────────────────────────────
 
 async def chat(user_id: int, message: str, user_context: str = "", source: str = "web") -> str:
     history = await _get_recent_history(user_id, limit=10)
@@ -128,7 +210,11 @@ async def chat(user_id: int, message: str, user_context: str = "", source: str =
     return reply
 
 
-async def generate_briefing(user_id: int, tasks_summary: str, journal_summary: str, reminders_summary: str) -> str:
+# ── Briefing (unchanged) ──────────────────────────────────────────────────────
+
+async def generate_briefing(
+    user_id: int, tasks_summary: str, journal_summary: str, reminders_summary: str
+) -> str:
     prompt = (
         f"Generate a concise, friendly daily briefing.\n\n"
         f"Active tasks:\n{tasks_summary}\n\n"
@@ -147,8 +233,9 @@ async def generate_briefing(user_id: int, tasks_summary: str, journal_summary: s
     return resp.choices[0].message.content
 
 
+# ── Workout helpers (unchanged) ───────────────────────────────────────────────
+
 async def parse_workout_log(user_id: int, text: str) -> dict:
-    """Classify and summarise a free-text workout description."""
     prompt = (
         f'Analyse this workout description and return JSON:\n'
         f'{{"category": "<cardio|upper_body|lower_body|core|flexibility|mixed|rest>", '
@@ -171,7 +258,6 @@ async def parse_workout_log(user_id: int, text: str) -> dict:
 
 
 async def generate_workout_insights(logs_data: list) -> dict:
-    """Analyse structured workout history and return fitness insights."""
     if not logs_data:
         return {
             "summary": "No workout history yet. Start logging your workouts to get personalised insights!",
@@ -183,7 +269,6 @@ async def generate_workout_insights(logs_data: list) -> dict:
         }
 
     logs_str = json.dumps(logs_data, indent=2)
-
     prompt = f"""\
 You are an expert fitness coach and data analyst. Analyse the following workout history (last 8 weeks) and return structured insights.
 
@@ -207,7 +292,6 @@ Rules:
 - Trends: patterns visible over time such as frequency changes, volume shifts, category patterns (2–3 items)
 - Recommendations: concrete next-step actions the user can take this week (exactly 3 items)
 """
-
     resp = await _client.chat.completions.create(
         model=settings.DEEPSEEK_MODEL,
         messages=[
@@ -230,13 +314,15 @@ Rules:
         }
 
 
-async def generate_workout_plan(user_id: int, logs_context: str, user_memory: str = "", workout_preference: str = "") -> dict:
-    """Generate a detailed, adaptive weekly workout plan using DeepSeek."""
+async def generate_workout_plan(
+    user_id: int,
+    logs_context: str,
+    user_memory: str = "",
+    workout_preference: str = "",
+) -> dict:
     today_name = datetime.now().strftime("%A")
-
-    history_block = logs_context.strip() if logs_context.strip() else "No workout history yet — design a well-rounded beginner-friendly starter plan."
-    memory_block = user_memory.strip() if user_memory.strip() else "No additional profile data."
-
+    history_block = logs_context.strip() or "No workout history yet — design a well-rounded beginner-friendly starter plan."
+    memory_block = user_memory.strip() or "No additional profile data."
     pref_block = (
         f"\n⭐ WORKOUT PREFERENCE (user-specified — treat this as the highest priority input):\n{workout_preference.strip()}"
         if workout_preference.strip() else ""
@@ -260,12 +346,12 @@ For complete beginners, start conservative with full-body sessions.
 Return ONLY this JSON (no markdown fences):
 {{
   "plan": {{
-    "monday":    {{"focus": "...", "warmup": "...", "exercises": [{{"name": "...", "sets": N, "reps": "...", "weight": "...", "notes": "..."}}], "cooldown": "...", "duration_min": N, "notes": "..."}},
-    "tuesday":   {{"focus": "...", "warmup": "...", "exercises": [...], "cooldown": "...", "duration_min": N, "notes": "..."}},
-    "wednesday": {{"focus": "...", "warmup": "...", "exercises": [...], "cooldown": "...", "duration_min": N, "notes": "..."}},
-    "thursday":  {{"focus": "...", "warmup": "...", "exercises": [...], "cooldown": "...", "duration_min": N, "notes": "..."}},
-    "friday":    {{"focus": "...", "warmup": "...", "exercises": [...], "cooldown": "...", "duration_min": N, "notes": "..."}},
-    "saturday":  {{"focus": "...", "warmup": "...", "exercises": [...], "cooldown": "...", "duration_min": N, "notes": "..."}},
+    "monday":    {{"focus": "...", "warmup": "...", "exercises": [{{"name": "...", "sets": 0, "reps": "...", "weight": "...", "notes": "..."}}], "cooldown": "...", "duration_min": 0, "notes": "..."}},
+    "tuesday":   {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
+    "wednesday": {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
+    "thursday":  {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
+    "friday":    {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
+    "saturday":  {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
     "sunday":    {{"focus": "Rest / Active Recovery", "warmup": "", "exercises": [], "cooldown": "", "duration_min": 0, "notes": "..."}}
   }},
   "notes": "<overall rationale: split logic, key adaptations from history, progression tips>"
@@ -279,7 +365,6 @@ Rules:
 - reps field: use strings like "8–10", "12–15", "30 sec", "AMRAP"
 - All 7 days must be present in the plan
 """
-
     resp = await _client.chat.completions.create(
         model=settings.DEEPSEEK_MODEL,
         messages=[

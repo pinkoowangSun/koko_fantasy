@@ -32,6 +32,8 @@ async def init_db():
             "ALTER TABLE users ADD COLUMN status VARCHAR DEFAULT 'approved'",
             "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0",
             "ALTER TABLE users ADD COLUMN notified_admin BOOLEAN DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN profile_summary TEXT",
+            "ALTER TABLE users ADD COLUMN profile_summary_updated_at DATETIME",
         ]:
             try:
                 await conn.execute(text(sql))

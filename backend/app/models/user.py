@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, JSON, Boolean
+from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, JSON, Boolean
 from app.database import Base
 
 
@@ -15,5 +15,7 @@ class User(Base):
     status = Column(String, default="approved")       # approved | pending | rejected
     is_admin = Column(Boolean, default=False)
     notified_admin = Column(Boolean, default=False)
+    profile_summary = Column(Text, nullable=True)
+    profile_summary_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
