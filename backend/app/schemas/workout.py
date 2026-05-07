@@ -19,6 +19,7 @@ class WorkoutExerciseOut(BaseModel):
     reps: Optional[str]
     weight_kg: Optional[float]
     notes: Optional[str]
+    source: str = "user"
 
     model_config = {"from_attributes": True}
 
@@ -40,6 +41,7 @@ class WorkoutLogOut(BaseModel):
     raw_text: str
     category: Optional[str]
     summary: Optional[str]
+    duration_min: Optional[int] = None
     source: str
     created_at: datetime
     exercises: list[WorkoutExerciseOut] = []

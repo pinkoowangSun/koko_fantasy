@@ -58,12 +58,28 @@ async def create_log(
         raw_text=body.raw_text,
         category=parsed.get("category"),
         summary=parsed.get("summary"),
+        duration_min=parsed.get("duration_min"),
         source=body.source,
     )
     db.add(log)
     await db.commit()
     await db.refresh(log)
-    # refresh with exercises relationship loaded
+
+    for ex in parsed.get("exercises") or []:
+        name = (ex.get("exercise_name") or "").strip()
+        if not name:
+            continue
+        db.add(WorkoutExercise(
+            log_id=log.id,
+            exercise_name=name,
+            sets=ex.get("sets"),
+            reps=ex.get("reps") or None,
+            weight_kg=ex.get("weight_kg"),
+            notes=ex.get("notes") or None,
+            source="ai",
+        ))
+    await db.commit()
+
     log = (await db.execute(
         select(WorkoutLog).options(selectinload(WorkoutLog.exercises)).where(WorkoutLog.id == log.id)
     )).scalar_one()
@@ -93,6 +109,31 @@ async def update_log(
         parsed = await parse_workout_log(current_user.id, body.raw_text)
         log.category = parsed.get("category")
         log.summary = parsed.get("summary")
+        log.duration_min = parsed.get("duration_min")
+
+        # Replace previously AI-extracted exercises with fresh parse
+        old_ai = (await db.execute(
+            select(WorkoutExercise).where(
+                WorkoutExercise.log_id == log.id,
+                WorkoutExercise.source == "ai",
+            )
+        )).scalars().all()
+        for ex in old_ai:
+            await db.delete(ex)
+
+        for ex in parsed.get("exercises") or []:
+            name = (ex.get("exercise_name") or "").strip()
+            if not name:
+                continue
+            db.add(WorkoutExercise(
+                log_id=log.id,
+                exercise_name=name,
+                sets=ex.get("sets"),
+                reps=ex.get("reps") or None,
+                weight_kg=ex.get("weight_kg"),
+                notes=ex.get("notes") or None,
+                source="ai",
+            ))
 
     await db.commit()
     log = (await db.execute(

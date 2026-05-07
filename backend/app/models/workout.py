@@ -13,6 +13,7 @@ class WorkoutLog(Base):
     raw_text = Column(Text, nullable=False)
     category = Column(String, nullable=True)   # cardio | upper_body | lower_body | core | flexibility | mixed | rest
     summary = Column(Text, nullable=True)       # AI-generated concise summary
+    duration_min = Column(Integer, nullable=True)  # AI-extracted total session duration
     source = Column(String, default="web")      # web | telegram
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -29,6 +30,7 @@ class WorkoutExercise(Base):
     reps = Column(String, nullable=True)        # "8–10", "AMRAP", "30 sec"
     weight_kg = Column(Float, nullable=True)
     notes = Column(String, nullable=True)
+    source = Column(String, default="user")     # "ai" (auto-extracted) | "user" (manually added)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     log = relationship("WorkoutLog", back_populates="exercises")

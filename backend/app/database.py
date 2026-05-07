@@ -34,6 +34,8 @@ async def init_db():
             "ALTER TABLE users ADD COLUMN notified_admin BOOLEAN DEFAULT 0",
             "ALTER TABLE users ADD COLUMN profile_summary TEXT",
             "ALTER TABLE users ADD COLUMN profile_summary_updated_at DATETIME",
+            "ALTER TABLE workout_logs ADD COLUMN duration_min INTEGER",
+            "ALTER TABLE workout_exercises ADD COLUMN source VARCHAR DEFAULT 'user'",
         ]:
             try:
                 await conn.execute(text(sql))

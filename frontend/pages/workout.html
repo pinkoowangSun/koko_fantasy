@@ -261,10 +261,19 @@
       <template x-if="!loadingLogs">
         <div>
 
+          <!-- Time range filter -->
+          <div class="tab-bar" style="margin-bottom:14px">
+            <button class="tab-btn" :class="{active: timeRange==='1W'}" @click="setFilter('1W')">1W</button>
+            <button class="tab-btn" :class="{active: timeRange==='1M'}" @click="setFilter('1M')">1M</button>
+            <button class="tab-btn" :class="{active: timeRange==='3M'}" @click="setFilter('3M')">3M</button>
+            <button class="tab-btn" :class="{active: timeRange==='6M'}" @click="setFilter('6M')">6M</button>
+            <button class="tab-btn" :class="{active: timeRange==='all'}" @click="setFilter('all')">All</button>
+          </div>
+
           <!-- ── Intensity chart ─────────────────────────────── -->
           <div class="card" style="margin-bottom:14px">
             <div style="margin-bottom:10px">
-              <div class="section-label">Session Intensity — last 20 workouts</div>
+              <div class="section-label" x-text="'Session Intensity — ' + rangeLabel"></div>
               <div style="font-size:11.5px;color:#ABAAA5;margin-top:3px">Bars = sets logged &nbsp;·&nbsp; Line = max weight (kg)</div>
             </div>
             <!-- Legend using same cat-badge classes as history items -->
@@ -273,12 +282,12 @@
                 <span class="cat-badge" :class="'cat-' + item.name" x-text="item.name.replace(/_/g,' ')"></span>
               </template>
             </div>
-            <template x-if="logs.length === 0">
+            <template x-if="filteredLogs.length === 0">
               <div style="text-align:center;padding:40px;color:#ABAAA5;font-size:13.5px">
-                Log some workouts to see your intensity chart.
+                <span x-text="logs.length === 0 ? 'Log some workouts to see your intensity chart.' : 'No workouts in this period.'"></span>
               </div>
             </template>
-            <template x-if="logs.length > 0">
+            <template x-if="filteredLogs.length > 0">
               <canvas id="chartIntensity" style="max-height:240px"></canvas>
             </template>
           </div>
@@ -347,21 +356,24 @@
           <!-- ── History list ────────────────────────────────── -->
           <div class="section-label" style="margin-bottom:10px">History</div>
 
-          <template x-if="logs.length === 0">
+          <template x-if="filteredLogs.length === 0">
             <div class="card" style="text-align:center;padding:40px;color:#ABAAA5">
-              <p style="font-size:14px">No workouts logged yet.</p>
-              <p style="font-size:13px;margin-top:6px">Click "+ Log Workout" to get started.</p>
+              <p style="font-size:14px" x-text="logs.length === 0 ? 'No workouts logged yet.' : 'No workouts in this period.'"></p>
+              <p x-show="logs.length === 0" style="font-size:13px;margin-top:6px">Click "+ Log Workout" to get started.</p>
             </div>
           </template>
 
           <div style="display:flex;flex-direction:column;gap:8px">
-            <template x-for="log in logs" :key="log.id">
+            <template x-for="log in filteredLogs" :key="log.id">
               <div class="history-item">
                 <!-- Header row: date / badges / actions -->
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
                   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                     <span style="font-size:12.5px;font-weight:600;color:#1A1917" x-text="fmtLogDate(log.log_date)"></span>
                     <span class="cat-badge" :class="'cat-' + (log.category || 'mixed')" x-text="(log.category || 'mixed').replace(/_/g,' ')"></span>
+                    <template x-if="log.duration_min">
+                      <span style="font-size:11.5px;color:#ABAAA5">⏱ <span x-text="log.duration_min + ' min'"></span></span>
+                    </template>
                     <span style="font-size:11.5px;color:#ABAAA5" x-text="log.source === 'telegram' ? '📱 Telegram' : '💻 Web'"></span>
                   </div>
                   <!-- Action buttons -->
@@ -398,7 +410,10 @@
                       <tbody>
                         <template x-for="ex in log.exercises" :key="ex.id">
                           <tr style="border-top:1px solid #F0EFE9">
-                            <td style="padding:4px 0;font-weight:500;color:#1A1917" x-text="ex.exercise_name"></td>
+                            <td style="padding:4px 0;font-weight:500;color:#1A1917">
+                              <span x-text="ex.exercise_name"></span>
+                              <span x-show="ex.source === 'ai'" style="font-size:10px;color:#ABAAA5;margin-left:4px;font-weight:400">AI</span>
+                            </td>
                             <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.sets || '—'"></td>
                             <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.reps || '—'"></td>
                             <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.weight_kg != null ? ex.weight_kg : '—'"></td>
@@ -593,6 +608,7 @@ function workoutApp() {
     _toastTimer: null,
     insights: null,
     loadingInsights: false,
+    timeRange: '3M',
     // edit / delete state
     showEditModal: false,
     editingLog: null,
@@ -601,6 +617,19 @@ function workoutApp() {
     editExercises: [],
     editSubmitting: false,
     deletingId: null,
+
+    get filteredLogs() {
+      if (this.timeRange === 'all') return this.logs;
+      const days = { '1W': 7, '1M': 30, '3M': 90, '6M': 180 }[this.timeRange];
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const cutoffStr = _localDateStr(cutoff);
+      return this.logs.filter(l => l.log_date >= cutoffStr);
+    },
+
+    get rangeLabel() {
+      return { '1W': 'last 7 days', '1M': 'last 30 days', '3M': 'last 3 months', '6M': 'last 6 months', 'all': 'all time' }[this.timeRange];
+    },
 
     // Category legend — array of objects so x-for can reference properties directly
     catLegend: Object.keys(CAT).map(name => ({ name })),
@@ -765,6 +794,12 @@ function workoutApp() {
       } catch (e) { this.showToast('Error: ' + e.message); }
     },
 
+    setFilter(range) {
+      this.timeRange = range;
+      if (_chart) { _chart.destroy(); _chart = null; }
+      setTimeout(() => this.initChart(), 10);
+    },
+
     async loadInsights() {
       if (this.loadingInsights) return;
       this.loadingInsights = true;
@@ -776,14 +811,14 @@ function workoutApp() {
     // ── Chart ──────────────────────────────────────────────────────
 
     initChart() {
-      if (typeof Chart === 'undefined' || this.logs.length === 0) return;
+      if (typeof Chart === 'undefined' || this.filteredLogs.length === 0) return;
       const el = document.getElementById('chartIntensity');
       if (!el) return;
 
       if (_chart) { _chart.destroy(); _chart = null; }
 
-      // Take last 20 sessions, oldest-first for left-to-right timeline
-      const sessions = [...this.logs].slice(0, 20).reverse();
+      // Oldest-first for left-to-right timeline; cap at 50 to keep labels readable
+      const sessions = [...this.filteredLogs].slice(0, 50).reverse();
 
       const labels    = sessions.map(l => this.fmtLogDate(l.log_date));
       const totalSets = sessions.map(l =>

@@ -237,15 +237,28 @@ async def generate_briefing(
 
 async def parse_workout_log(user_id: int, text: str) -> dict:
     prompt = (
-        f'Analyse this workout description and return JSON:\n'
-        f'{{"category": "<cardio|upper_body|lower_body|core|flexibility|mixed|rest>", '
-        f'"summary": "<concise 1-2 sentence summary of what was done>"}}\n\n'
-        f'Description: {text}\n\nReturn valid JSON only.'
+        'Analyse this workout description and return JSON with this exact structure:\n'
+        '{\n'
+        '  "category": "<cardio|upper_body|lower_body|core|flexibility|mixed|rest>",\n'
+        '  "summary": "<concise 1-2 sentence summary>",\n'
+        '  "duration_min": <integer total minutes or null>,\n'
+        '  "exercises": [\n'
+        '    {"exercise_name": "<name>", "sets": <int or null>, "reps": "<string or null>", "weight_kg": <float or null>, "notes": "<string or null>"}\n'
+        '  ]\n'
+        '}\n\n'
+        f'Description: {text}\n\n'
+        'Rules:\n'
+        '- Extract every distinct exercise or activity mentioned\n'
+        '- For cardio (running, cycling, swimming): one entry, use reps for distance/duration (e.g. "5km", "30 min"), notes for pace if given\n'
+        '- sets/weight_kg: integer/float only when explicitly stated, otherwise null\n'
+        '- duration_min: total session time in minutes when mentioned, else null\n'
+        '- exercises: empty array [] if nothing specific is mentioned\n'
+        '- Return valid JSON only.'
     )
     resp = await _client.chat.completions.create(
         model=settings.DEEPSEEK_MODEL,
         messages=[
-            {"role": "system", "content": "You are a fitness analyst. Classify and summarise workout descriptions."},
+            {"role": "system", "content": "You are a fitness analyst. Classify, summarise, and extract structured data from workout descriptions."},
             {"role": "user", "content": prompt},
         ],
         temperature=0.1,
@@ -254,7 +267,7 @@ async def parse_workout_log(user_id: int, text: str) -> dict:
     try:
         return json.loads(resp.choices[0].message.content)
     except json.JSONDecodeError:
-        return {"category": "mixed", "summary": text[:200]}
+        return {"category": "mixed", "summary": text[:200], "duration_min": None, "exercises": []}
 
 
 async def generate_workout_insights(logs_data: list) -> dict:
