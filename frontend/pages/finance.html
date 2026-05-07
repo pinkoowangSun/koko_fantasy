@@ -470,9 +470,21 @@
       <div class="form-group">
         <label class="form-label">Category</label>
         <select class="form-input" x-model="txForm.category">
-          <template x-for="cat in categories" :key="cat">
-            <option :value="cat" x-text="catLabel(cat)"></option>
-          </template>
+          <option value="food">Food</option>
+          <option value="grocery">Grocery</option>
+          <option value="transport">Transport</option>
+          <option value="housing">Housing</option>
+          <option value="utilities">Utilities</option>
+          <option value="entertainment">Entertainment</option>
+          <option value="health">Health</option>
+          <option value="education">Education</option>
+          <option value="gift">Gift</option>
+          <option value="shopping">Shopping</option>
+          <option value="travel">Travel</option>
+          <option value="salary">Salary</option>
+          <option value="freelance">Freelance</option>
+          <option value="investment">Investment</option>
+          <option value="other">Other</option>
         </select>
       </div>
       <div class="form-group">
