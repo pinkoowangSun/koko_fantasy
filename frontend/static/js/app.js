@@ -65,6 +65,27 @@ function logout() {
   window.location.href = '/';
 }
 
+function showToast(msg, type) {
+  let el = document.getElementById('_koko_toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_koko_toast';
+    el.style.cssText = [
+      'position:fixed', 'bottom:28px', 'left:50%', 'transform:translateX(-50%)',
+      'padding:10px 22px', 'border-radius:12px', 'font-size:13.5px', 'font-weight:500',
+      'z-index:9999', 'transition:opacity .3s', 'pointer-events:none',
+      "font-family:'Inter',sans-serif", 'white-space:nowrap', 'box-shadow:0 4px 16px rgba(0,0,0,.18)',
+    ].join(';');
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = type === 'error' ? '#ef4444' : '#1A1917';
+  el.style.color = '#fff';
+  el.style.opacity = '1';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.opacity = '0'; }, 3200);
+}
+
 function fmtDate(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
