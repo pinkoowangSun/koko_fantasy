@@ -150,37 +150,58 @@
 <!-- ── Day Detail Modal ───────────────────────────────────────── -->
 <div x-show="dayModal" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,0.30);backdrop-filter:blur(6px);z-index:50;overflow-y:auto;padding:24px"
-     @click.self="dayModal=null">
+     @click.self="dayModal=null; journalDetail=null">
   <div style="min-height:100%;display:flex;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,0.12);width:100%;max-width:400px"
        @click.stop>
 
     <!-- Header -->
     <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start">
-      <div>
-        <p style="font-size:11.5px;color:#ABAAA5;margin:0 0 2px"
-           x-text="dayModal ? new Date(dayModal.date+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}) : ''"></p>
-        <p style="font-size:17px;font-weight:600;color:#1A1917;margin:0;letter-spacing:-0.3px"
-           x-text="dayModal ? new Date(dayModal.date+'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : ''"></p>
+      <div style="display:flex;align-items:center;gap:8px">
+        <template x-if="journalDetail">
+          <button @click="journalDetail=null"
+            style="background:none;border:none;cursor:pointer;font-size:13.5px;color:#ABAAA5;padding:0;font-family:inherit;line-height:1">← Back</button>
+        </template>
+        <div>
+          <p style="font-size:11.5px;color:#ABAAA5;margin:0 0 2px"
+             x-text="journalDetail ? (journalDetail.mood || 'Journal') : (dayModal ? new Date(dayModal.date+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}) : '')"></p>
+          <p style="font-size:17px;font-weight:600;color:#1A1917;margin:0;letter-spacing:-0.3px"
+             x-text="journalDetail ? (journalDetail.title || 'Journal entry') : (dayModal ? new Date(dayModal.date+'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : '')"></p>
+        </div>
       </div>
-      <button @click="dayModal=null"
+      <button @click="dayModal=null; journalDetail=null"
         style="width:26px;height:26px;border-radius:50%;background:#F0EFEC;border:none;cursor:pointer;font-size:12px;color:#78776E;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
     </div>
 
-    <div style="padding:16px 20px 20px">
+    <!-- Journal detail view -->
+    <template x-if="journalDetail">
+      <div style="padding:16px 20px 24px">
+        <template x-if="journalDetail.content_html">
+          <div style="font-size:14px;color:#4B4B47;line-height:1.7" x-html="journalDetail.content_html"></div>
+        </template>
+        <template x-if="!journalDetail.content_html && journalDetail.content">
+          <p style="font-size:14px;color:#4B4B47;line-height:1.7;margin:0" x-text="journalDetail.content"></p>
+        </template>
+        <template x-if="!journalDetail.content_html && !journalDetail.content">
+          <p style="font-size:13.5px;color:#ABAAA5;font-style:italic;margin:0">No content recorded.</p>
+        </template>
+      </div>
+    </template>
+
+    <!-- Summary list (hidden while viewing journal detail) -->
+    <div x-show="!journalDetail" style="padding:16px 20px 20px">
 
       <!-- Journal -->
       <template x-if="dayModal?.journal?.length">
         <div style="margin-bottom:18px">
           <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Journal</p>
           <template x-for="j in dayModal.journal" :key="j.id">
-            <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6">
+            <div @click="openJournalDetail(j)"
+                 style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
               <span style="font-size:15px;flex-shrink:0" x-text="j.mood_icon || '📓'"></span>
               <span style="flex:1;font-size:13.5px;color:#1A1917;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                     x-text="j.title || 'Journal entry'"></span>
-              <button @click="deleteEntry('journal',j.id)"
-                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:16px;color:#D1D5DB;padding:0;line-height:1"
-                onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#D1D5DB'">×</button>
+              <span style="font-size:12px;color:#ABAAA5">›</span>
             </div>
           </template>
         </div>
@@ -191,13 +212,12 @@
         <div style="margin-bottom:18px">
           <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Tasks</p>
           <template x-for="t in dayModal.tasks" :key="t.id">
-            <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6">
+            <div @click="dayModal=null; window.location.href='/tasks'"
+                 style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
               <span x-text="statusIcon(t.status)" style="font-size:14px;flex-shrink:0"></span>
               <span style="flex:1;font-size:13.5px;color:#1A1917;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                     x-text="t.title"></span>
-              <button @click="deleteEntry('task',t.id)"
-                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:16px;color:#D1D5DB;padding:0;line-height:1"
-                onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#D1D5DB'">×</button>
+              <span style="font-size:12px;color:#ABAAA5">›</span>
             </div>
           </template>
         </div>
@@ -208,13 +228,12 @@
         <div style="margin-bottom:18px">
           <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Documents</p>
           <template x-for="d in dayModal.documents" :key="d.id">
-            <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6">
+            <div @click="dayModal=null; window.location.href='/documents'"
+                 style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
               <span style="font-size:14px;flex-shrink:0">📄</span>
               <span style="flex:1;font-size:13.5px;color:#1A1917;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                     x-text="d.original_name"></span>
-              <button @click="deleteEntry('document',d.id)"
-                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:16px;color:#D1D5DB;padding:0;line-height:1"
-                onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#D1D5DB'">×</button>
+              <span style="font-size:12px;color:#ABAAA5">›</span>
             </div>
           </template>
         </div>
@@ -226,7 +245,8 @@
           <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Money</p>
           <!-- Net per currency -->
           <template x-for="row in dayModalFinanceNet" :key="row.cur">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #F3F4F6">
+            <div @click="dayModal=null; window.location.href='/finance'"
+                 style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
               <span style="font-size:13px;color:#78776E">Net today</span>
               <span style="font-size:13.5px;font-weight:600"
                     :style="'color:'+(row.net>=0?'#16A34A':'#DC2626')"
@@ -235,7 +255,8 @@
           </template>
           <!-- Transactions -->
           <template x-for="t in dayModal.finance.transactions" :key="t.id">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #F3F4F6">
+            <div @click="dayModal=null; window.location.href='/finance'"
+                 style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
               <span style="font-size:13.5px;color:#1A1917;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                     x-text="t.description||t.category"></span>
               <span style="font-size:13px;flex-shrink:0;margin-left:12px"
@@ -495,6 +516,7 @@
     return {
       briefing: null,
       dayModal: null,
+      journalDetail: null,
       todaySummary: null,
       financeDaily: null,
       financeGoals: [],
@@ -598,7 +620,13 @@
             },
           }],
           dateClick: (info) => self.openDayModal(info.dateStr),
-          eventClick: (info) => self.openDayModal(info.event.startStr),
+          eventClick: (info) => {
+            const { type } = info.event.extendedProps;
+            if (type === 'task')     { window.location.href = '/tasks';     return; }
+            if (type === 'document') { window.location.href = '/documents'; return; }
+            if (type === 'finance')  { window.location.href = '/finance';   return; }
+            self.openDayModal(info.event.startStr.slice(0, 10));
+          },
         });
         this.calendarObj.render();
       },
@@ -607,6 +635,10 @@
         try {
           this.dayModal = await API.get(`/calendar/day-detail?day=${dateStr}`);
         } catch(e) { console.error(e); }
+      },
+
+      openJournalDetail(j) {
+        this.journalDetail = j;
       },
 
       async loadBriefing() {
