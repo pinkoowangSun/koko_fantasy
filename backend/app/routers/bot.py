@@ -374,6 +374,65 @@ async def _handle_delete_workout(data: dict, user: User, db: AsyncSession) -> di
     return {"response": f"🗑 Workout session for {log_date} deleted.", "data": {}}
 
 
+async def _handle_update_workout(data: dict, user: User, db: AsyncSession) -> dict:
+    log_date_str = data.get("log_date")
+    target_date = date.fromisoformat(log_date_str) if log_date_str else _local_date(user)
+
+    log = (await db.execute(
+        select(WorkoutLog)
+        .options(selectinload(WorkoutLog.exercises))
+        .where(WorkoutLog.user_id == user.id, WorkoutLog.log_date == target_date)
+        .order_by(WorkoutLog.created_at.desc())
+    )).scalars().first()
+
+    if not log:
+        date_label = "today" if target_date == _local_date(user) else str(target_date)
+        return {"response": f"I couldn't find a workout logged for {date_label}.", "data": {}}
+
+    updated = []
+
+    if data.get("duration_min") is not None:
+        log.duration_min = int(data["duration_min"])
+        updated.append(f"duration → {log.duration_min} min")
+
+    if data.get("calories_burnt") is not None:
+        log.calories_burnt = int(data["calories_burnt"])
+        updated.append(f"calories → {log.calories_burnt} kcal")
+
+    exercise_index = data.get("exercise_index")
+    if exercise_index is not None:
+        exercises = sorted(log.exercises, key=lambda e: e.id)
+        idx = int(exercise_index) - 1
+        if not (0 <= idx < len(exercises)):
+            return {
+                "response": (
+                    f"Exercise #{exercise_index} not found — "
+                    f"that workout has {len(exercises)} exercise(s)."
+                ),
+                "data": {},
+            }
+        ex = exercises[idx]
+        if data.get("sets") is not None:
+            ex.sets = int(data["sets"])
+            updated.append(f"{ex.exercise_name} sets → {ex.sets}")
+        if data.get("reps") is not None:
+            ex.reps = str(data["reps"])
+            updated.append(f"{ex.exercise_name} reps → {ex.reps}")
+        if data.get("weight_kg") is not None:
+            ex.weight_kg = float(data["weight_kg"])
+            updated.append(f"{ex.exercise_name} weight → {ex.weight_kg} kg")
+
+    if not updated:
+        return {
+            "response": "Not sure what to update — try mentioning duration, calories, or a specific exercise's sets/reps/weight.",
+            "data": {},
+        }
+
+    await db.commit()
+    date_label = "today's" if target_date == _local_date(user) else f"{target_date}'s"
+    return {"response": f"✅ Updated {date_label} workout: {', '.join(updated)}.", "data": {}}
+
+
 async def _handle_create_memory(data: dict, user: User, db: AsyncSession) -> dict:
     item = MemoryItem(
         user_id=user.id,
@@ -611,6 +670,8 @@ async def _execute_write(action: str, domain: str, data: dict, user: User, db: A
                 return await _handle_create_workout(data, user, db)
             elif action == "delete":
                 return await _handle_delete_workout(data, user, db)
+            elif action == "update":
+                return await _handle_update_workout(data, user, db)
         elif domain == "memory":
             if action == "create":
                 return await _handle_create_memory(data, user, db)

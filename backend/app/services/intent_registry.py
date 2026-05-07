@@ -128,6 +128,13 @@ delete + journal:  entry_date (ISO date of the entry to remove)
 
 create + workout:  raw_text (full workout description verbatim), log_date (ISO date, today if not specified)
 delete + workout:  log_date (ISO date of the session to remove)
+update + workout:  log_date (ISO date of the session to edit; omit entirely if the user means today),
+  duration_min (updated duration in minutes; omit if not mentioned),
+  calories_burnt (updated calorie count in kcal; omit if not mentioned),
+  exercise_index (1-based position of the exercise to edit; omit if not editing an exercise),
+  sets (new sets count; omit if not mentioned), reps (new reps string e.g. "8–10"; omit if not mentioned),
+  weight_kg (new weight in kg; omit if not mentioned)
+  Only extract fields the user explicitly stated — they will typically mention just 1–2.
 
 create + memory:   key, value, category (preference/fact/note, default general)
 delete + memory:   key (the memory key to remove)
@@ -146,6 +153,9 @@ Use create+workout when the user describes any physical activity \
 (ran, walked, lifted, gym, workout, exercise, pushups, squats, cycling, swimming, etc.).
 Use read+workout when asking about their plan or what to do today.
 Use generate+workout when asking to create or regenerate a weekly plan.
+Use update+workout when the user corrects or adjusts a logged session \
+("actually it was 45 min", "that was 400 calories", "I did 4 sets not 3", \
+"update my squat weight to 80kg", "change today's calories to 350").
 
 Use current_time_utc and user_timezone from context to convert any local times to UTC.
 Always output valid JSON only. No markdown fences.\
