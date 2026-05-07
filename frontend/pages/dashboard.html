@@ -86,6 +86,12 @@
           </button>
         </div>
 
+        <!-- AI briefing teaser -->
+        <template x-if="briefingTeaser">
+          <p style="font-size:13px;color:#78776E;font-style:italic;line-height:1.6;margin:0 0 12px;padding-bottom:12px;border-bottom:1px solid #F3F4F6"
+             x-text="briefingTeaser"></p>
+        </template>
+
         <template x-for="j in todaySummary.journal" :key="'tj'+j.id">
           <div @click="openDayModal(todaySummary.date)"
                style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #F3F4F6;cursor:pointer">
@@ -117,8 +123,8 @@
             <span style="font-size:15px;flex-shrink:0">💰</span>
             <span style="flex:1;font-size:14px;color:#1A1917;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
                   x-text="financeRowLabel"></span>
-            <span style="width:7px;height:7px;border-radius:50%;flex-shrink:0"
-                  :style="'background:' + (financeNetRows.every(r => r.net >= 0) ? '#10B981' : '#EF4444')"></span>
+            <span style="font-size:11px;color:#ABAAA5;background:#F0EFEC;padding:2px 6px;border-radius:6px;flex-shrink:0"
+                  x-text="financeDaily.transactions.length + ' txn'"></span>
           </div>
         </template>
       </div>
@@ -497,14 +503,17 @@
 
       get financeRowLabel() {
         const rows = this.financeNetRows;
-        const n = this.financeDaily?.transactions?.length || 0;
         if (!rows.length) return '';
-        const parts = rows.map(r => {
+        return rows.map(r => {
           const sign = r.net >= 0 ? '+' : '−';
           return `${sign}${Math.abs(r.net).toLocaleString()} ${r.cur}`;
-        });
-        const suffix = n === 1 ? '1 transaction' : `${n} transactions`;
-        return `${parts.join(' · ')} · ${suffix} today`;
+        }).join(' · ');
+      },
+
+      get briefingTeaser() {
+        if (!this.briefing) return '';
+        const m = this.briefing.match(/^.+?[.!?]/);
+        return m ? m[0] : this.briefing.slice(0, 120);
       },
 
       todayStr() {
