@@ -75,11 +75,7 @@
     <template x-if="todaySummary && (todaySummary.tasks.length || todaySummary.journal.length || (financeDaily && financeDaily.transactions.length > 0))">
       <div class="card" style="margin-bottom:20px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:14px;font-weight:600;color:#1A1917">Today</span>
-            <span style="font-size:11px;background:#F0EFEC;color:#78776E;padding:2px 8px;border-radius:999px;font-weight:500"
-                  x-text="(todaySummary.tasks.length + todaySummary.journal.length) + ' item' + ((todaySummary.tasks.length + todaySummary.journal.length) === 1 ? '' : 's')"></span>
-          </div>
+          <span style="font-size:14px;font-weight:600;color:#1A1917">Today</span>
           <button @click="openDayModal(todaySummary.date)"
             style="font-size:12.5px;color:#ABAAA5;background:none;border:none;cursor:pointer;font-family:inherit">
             See all →
@@ -153,52 +149,38 @@
 
 <!-- ── Day Detail Modal ───────────────────────────────────────── -->
 <div x-show="dayModal" x-cloak
-     style="position:fixed;inset:0;background:rgba(0,0,0,0.36);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:50;overflow-y:auto;padding:20px"
+     style="position:fixed;inset:0;background:rgba(0,0,0,0.30);backdrop-filter:blur(6px);z-index:50;overflow-y:auto;padding:24px"
      @click.self="dayModal=null">
   <div style="min-height:100%;display:flex;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:22px;box-shadow:0 32px 80px rgba(0,0,0,0.18);width:100%;max-width:420px"
+  <div style="background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,0.12);width:100%;max-width:400px"
        @click.stop>
 
     <!-- Header -->
-    <div style="padding:24px 24px 16px;display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;background:#fff;border-radius:22px 22px 0 0;z-index:1">
+    <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <p style="font-size:12px;font-weight:500;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Day Summary</p>
-        <h2 style="font-size:20px;font-weight:700;letter-spacing:-0.4px;color:#1A1917;margin:0" x-text="dayModal?.date"></h2>
+        <p style="font-size:11.5px;color:#ABAAA5;margin:0 0 2px"
+           x-text="dayModal ? new Date(dayModal.date+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}) : ''"></p>
+        <p style="font-size:17px;font-weight:600;color:#1A1917;margin:0;letter-spacing:-0.3px"
+           x-text="dayModal ? new Date(dayModal.date+'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : ''"></p>
       </div>
       <button @click="dayModal=null"
-        style="width:30px;height:30px;border-radius:50%;background:#F0EFEC;border:none;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:4px">✕</button>
+        style="width:26px;height:26px;border-radius:50%;background:#F0EFEC;border:none;cursor:pointer;font-size:12px;color:#78776E;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
     </div>
 
-    <div style="padding:0 24px 28px">
+    <div style="padding:16px 20px 20px">
 
       <!-- Journal -->
       <template x-if="dayModal?.journal?.length">
-        <div style="margin-bottom:24px">
-          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
-            <span style="width:8px;height:8px;border-radius:50%;background:#10B981;display:inline-block;flex-shrink:0"></span>
-            <span style="font-size:12px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.5px">Journal</span>
-          </div>
+        <div style="margin-bottom:18px">
+          <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Journal</p>
           <template x-for="j in dayModal.journal" :key="j.id">
-            <div style="padding:14px 0;border-bottom:1px solid #F3F4F6">
-              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-                <p style="font-size:14px;font-weight:600;color:#1A1917;margin:0 0 4px" x-text="j.title || 'Entry'"></p>
-                <button @click="deleteEntry('journal', j.id)"
-                  style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:14px;color:#DC2626;padding:0;line-height:1;opacity:0.6"
-                  onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'"
-                  title="Delete entry">🗑</button>
-              </div>
-              <template x-if="j.content_html">
-                <div style="font-size:13.5px;color:#4B4B47;line-height:1.6" x-html="j.content_html"></div>
-              </template>
-              <template x-if="!j.content_html && j.content">
-                <p style="font-size:13.5px;color:#4B4B47;line-height:1.6;margin:0" x-text="j.content"></p>
-              </template>
-              <template x-if="j.mood">
-                <div style="display:inline-flex;align-items:center;gap:5px;margin-top:9px;background:#F0FDF4;border-radius:999px;padding:3px 10px 3px 6px">
-                  <span style="font-size:16px" x-text="moodIcon(j.mood)"></span>
-                  <span style="font-size:12px;color:#16A34A;font-weight:500" x-text="j.mood"></span>
-                </div>
-              </template>
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6">
+              <span style="font-size:15px;flex-shrink:0" x-text="j.mood_icon || '📓'"></span>
+              <span style="flex:1;font-size:13.5px;color:#1A1917;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                    x-text="j.title || 'Journal entry'"></span>
+              <button @click="deleteEntry('journal',j.id)"
+                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:16px;color:#D1D5DB;padding:0;line-height:1"
+                onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#D1D5DB'">×</button>
             </div>
           </template>
         </div>
@@ -206,19 +188,16 @@
 
       <!-- Tasks -->
       <template x-if="dayModal?.tasks?.length">
-        <div style="margin-bottom:24px">
-          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
-            <span style="width:8px;height:8px;border-radius:50%;background:#3B82F6;display:inline-block;flex-shrink:0"></span>
-            <span style="font-size:12px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.5px">Tasks</span>
-          </div>
+        <div style="margin-bottom:18px">
+          <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Tasks</p>
           <template x-for="t in dayModal.tasks" :key="t.id">
-            <div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F3F4F6">
-              <span x-text="statusIcon(t.status)" style="font-size:15px;flex-shrink:0"></span>
-              <span style="flex:1;font-size:14px;color:#1A1917;font-weight:500" x-text="t.title"></span>
-              <button @click="deleteEntry('task', t.id)"
-                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:14px;color:#DC2626;padding:0;line-height:1;opacity:0.6"
-                onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'"
-                title="Delete task">🗑</button>
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6">
+              <span x-text="statusIcon(t.status)" style="font-size:14px;flex-shrink:0"></span>
+              <span style="flex:1;font-size:13.5px;color:#1A1917;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                    x-text="t.title"></span>
+              <button @click="deleteEntry('task',t.id)"
+                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:16px;color:#D1D5DB;padding:0;line-height:1"
+                onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#D1D5DB'">×</button>
             </div>
           </template>
         </div>
@@ -226,18 +205,16 @@
 
       <!-- Documents -->
       <template x-if="dayModal?.documents?.length">
-        <div style="margin-bottom:24px">
-          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
-            <span style="width:8px;height:8px;border-radius:50%;background:#F59E0B;display:inline-block;flex-shrink:0"></span>
-            <span style="font-size:12px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.5px">Documents</span>
-          </div>
+        <div style="margin-bottom:18px">
+          <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Documents</p>
           <template x-for="d in dayModal.documents" :key="d.id">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #F3F4F6">
-              <span style="font-size:14px;color:#1A1917;font-weight:500" x-text="d.original_name"></span>
-              <button @click="deleteEntry('document', d.id)"
-                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:14px;color:#DC2626;padding:0;line-height:1;opacity:0.6"
-                onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'"
-                title="Delete document">🗑</button>
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #F3F4F6">
+              <span style="font-size:14px;flex-shrink:0">📄</span>
+              <span style="flex:1;font-size:13.5px;color:#1A1917;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                    x-text="d.original_name"></span>
+              <button @click="deleteEntry('document',d.id)"
+                style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:16px;color:#D1D5DB;padding:0;line-height:1"
+                onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#D1D5DB'">×</button>
             </div>
           </template>
         </div>
@@ -245,72 +222,65 @@
 
       <!-- Finance -->
       <template x-if="dayModal?.finance?.transactions?.length">
-        <div style="margin-bottom:24px">
-          <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px">
-            <span style="width:8px;height:8px;border-radius:50%;background:#F59E0B;display:inline-block;flex-shrink:0"></span>
-            <span style="font-size:12px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.5px">Money</span>
-          </div>
-          <!-- Net flow -->
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-            <template x-for="row in dayModalFinanceNet" :key="row.cur">
-              <div style="flex:1;min-width:100px;background:#F6F5F2;border-radius:12px;padding:10px 14px">
-                <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 3px;text-transform:uppercase;letter-spacing:.4px">Net · <span x-text="row.cur"></span></p>
-                <p style="font-size:17px;font-weight:700;margin:0"
-                   :style="'color:' + (row.net >= 0 ? '#16A34A' : '#DC2626')"
-                   x-text="(row.net >= 0 ? '+' : '−') + Math.abs(row.net).toLocaleString()"></p>
-              </div>
-            </template>
-          </div>
+        <div style="margin-bottom:18px">
+          <p style="font-size:11px;color:#ABAAA5;font-weight:500;margin:0 0 4px">Money</p>
+          <!-- Net per currency -->
+          <template x-for="row in dayModalFinanceNet" :key="row.cur">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #F3F4F6">
+              <span style="font-size:13px;color:#78776E">Net today</span>
+              <span style="font-size:13.5px;font-weight:600"
+                    :style="'color:'+(row.net>=0?'#16A34A':'#DC2626')"
+                    x-text="(row.net>=0?'+':'−')+Math.abs(row.net).toLocaleString()+' '+row.cur"></span>
+            </div>
+          </template>
           <!-- Transactions -->
           <template x-for="t in dayModal.finance.transactions" :key="t.id">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #F3F4F6">
-              <span style="font-size:13.5px;color:#4B4B47" x-text="t.category + (t.description ? ' · ' + t.description : '')"></span>
-              <span style="font-size:13.5px;font-weight:600;flex-shrink:0"
-                    :style="'color:' + (t.transaction_type === 'income' ? '#16A34A' : '#DC2626')"
-                    x-text="(t.transaction_type === 'income' ? '+' : '−') + Number(t.amount).toLocaleString() + ' ' + t.currency"></span>
+              <span style="font-size:13.5px;color:#1A1917;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                    x-text="t.description||t.category"></span>
+              <span style="font-size:13px;flex-shrink:0;margin-left:12px"
+                    :style="'color:'+(t.transaction_type==='income'?'#16A34A':'#DC2626')"
+                    x-text="(t.transaction_type==='income'?'+':'−')+Number(t.amount).toLocaleString()+' '+t.currency"></span>
             </div>
           </template>
-          <!-- Gap to goal targets -->
+          <!-- Goal gaps -->
           <template x-if="activeGoalsWithGap.length > 0">
-            <div style="margin-top:14px">
-              <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px">Goal progress</p>
-              <template x-for="g in activeGoalsWithGap" :key="g.title">
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0">
-                  <span style="font-size:13px;color:#4B4B47;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="g.title"></span>
-                  <span style="font-size:12px;font-weight:500;flex-shrink:0;margin-left:12px"
-                        :style="'color:' + (g.gap <= 0 ? '#16A34A' : '#ABAAA5')"
-                        x-text="g.gap <= 0 ? 'Achieved ✓' : Math.abs(g.gap).toLocaleString() + ' ' + g.currency + ' to go'"></span>
-                </div>
-              </template>
-            </div>
+            <template x-for="g in activeGoalsWithGap" :key="g.title">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0">
+                <span style="font-size:13px;color:#78776E;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                      x-text="g.title"></span>
+                <span style="font-size:12px;font-weight:500;flex-shrink:0;margin-left:12px"
+                      :style="'color:'+(g.gap<=0?'#16A34A':'#ABAAA5')"
+                      x-text="g.gap<=0?'Achieved':Math.abs(g.gap).toLocaleString()+' '+g.currency+' to go'"></span>
+              </div>
+            </template>
           </template>
         </div>
       </template>
 
       <!-- Empty state -->
       <template x-if="!dayModal?.journal?.length && !dayModal?.tasks?.length && !dayModal?.documents?.length && !dayModal?.finance?.transactions?.length">
-        <div style="text-align:center;padding:40px 0 16px">
-          <div style="width:56px;height:56px;background:#F6F5F2;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 14px">📭</div>
-          <p style="font-size:15px;font-weight:500;color:#1A1917;margin:0 0 4px">Nothing here yet</p>
-          <p style="font-size:13.5px;color:#ABAAA5;margin:0 0 20px">No entries recorded on this day.</p>
-          <button @click="dayModal=null; openAddEntry()"
-            style="background:#1A1917;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
+        <div style="text-align:center;padding:28px 0 8px">
+          <p style="font-size:14px;font-weight:500;color:#1A1917;margin:0 0 4px">Nothing here yet</p>
+          <p style="font-size:13px;color:#ABAAA5;margin:0 0 18px">No entries on this day.</p>
+          <button @click="dayModal=null;openAddEntry()"
+            style="background:#1A1917;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit">
             + Add Entry
           </button>
         </div>
       </template>
 
-      <!-- Add to this day -->
+      <!-- Add button -->
       <template x-if="dayModal?.journal?.length || dayModal?.tasks?.length || dayModal?.documents?.length || dayModal?.finance?.transactions?.length">
-        <button @click="dayModal=null; openAddEntry()"
-          style="width:100%;height:44px;background:#F6F5F2;color:#1A1917;border:none;border-radius:12px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:4px">
-          + Add Another Entry
+        <button @click="dayModal=null;openAddEntry()"
+          style="width:100%;height:40px;background:#F6F5F2;color:#1A1917;border:none;border-radius:10px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:6px">
+          + Add Entry
         </button>
       </template>
 
     </div>
   </div>
-  </div><!-- end centering wrapper -->
+  </div>
 </div>
 
 <!-- ── Add Entry Modal ────────────────────────────────────────── -->
