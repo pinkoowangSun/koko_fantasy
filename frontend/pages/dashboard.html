@@ -72,7 +72,7 @@
     </template>
 
     <!-- Today's Preview -->
-    <template x-if="todaySummary && (todaySummary.tasks.length || todaySummary.journal.length)">
+    <template x-if="todaySummary && (todaySummary.tasks.length || todaySummary.journal.length || (financeDaily && financeDaily.transactions.length > 0))">
       <div class="card" style="margin-bottom:20px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:8px">
@@ -109,25 +109,23 @@
                   :style="'background:' + priorityColor(t.priority)"></span>
           </div>
         </template>
-      </div>
-    </template>
 
-    <!-- Finance daily tracker -->
-    <template x-if="financeDaily && (Object.keys(financeDaily.income_by_currency).length || Object.keys(financeDaily.expense_by_currency).length)">
-      <div class="card" style="margin-bottom:20px;cursor:pointer" @click="window.location.href='/finance'">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px">Today's Money Flow</span>
-          <span style="font-size:12px;color:#ABAAA5">→ Finance</span>
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
-          <template x-for="(val, cur) in financeDaily.income_by_currency" :key="'in'+cur">
-            <span style="font-size:14px;font-weight:600;color:#16a34a" x-text="'+' + Number(val).toLocaleString() + ' ' + cur"></span>
-          </template>
-          <template x-for="(val, cur) in financeDaily.expense_by_currency" :key="'ex'+cur">
-            <span style="font-size:14px;font-weight:600;color:#dc2626" x-text="'-' + Number(val).toLocaleString() + ' ' + cur"></span>
-          </template>
-        </div>
-        <div x-show="financeDaily.transactions.length > 0" style="margin-top:8px;font-size:12px;color:#ABAAA5" x-text="financeDaily.transactions.length + ' transaction' + (financeDaily.transactions.length === 1 ? '' : 's') + ' today'"></div>
+        <!-- Finance row -->
+        <template x-if="financeDaily && financeDaily.transactions.length > 0">
+          <div @click="window.location.href='/finance'"
+               style="display:flex;align-items:center;gap:10px;padding:9px 0;cursor:pointer">
+            <span style="font-size:15px;flex-shrink:0">💰</span>
+            <span style="flex:1;display:flex;gap:10px;flex-wrap:wrap">
+              <template x-for="row in financeNetRows" :key="row.cur">
+                <span style="font-size:13.5px;font-weight:600"
+                      :style="'color:' + (row.net >= 0 ? '#16a34a' : '#dc2626')"
+                      x-text="(row.net >= 0 ? '+' : '') + Number(row.net).toLocaleString() + ' ' + row.cur"></span>
+              </template>
+            </span>
+            <span style="font-size:12px;color:#ABAAA5;flex-shrink:0"
+                  x-text="financeDaily.transactions.length + ' txn' + (financeDaily.transactions.length === 1 ? '' : 's')"></span>
+          </div>
+        </template>
       </div>
     </template>
 
@@ -492,6 +490,14 @@
 
       get todayLabel() {
         return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      },
+
+      get financeNetRows() {
+        if (!this.financeDaily) return [];
+        const inc = this.financeDaily.income_by_currency || {};
+        const exp = this.financeDaily.expense_by_currency || {};
+        const currencies = new Set([...Object.keys(inc), ...Object.keys(exp)]);
+        return [...currencies].map(cur => ({ cur, net: (inc[cur] || 0) - (exp[cur] || 0) }));
       },
 
       todayStr() {
