@@ -30,9 +30,19 @@ class WorkoutLogCreate(BaseModel):
     source: str = "web"
 
 
+class WorkoutExerciseUpdate(BaseModel):
+    exercise_name: Optional[str] = None
+    sets: Optional[int] = None
+    reps: Optional[str] = None
+    weight_kg: Optional[float] = None
+    notes: Optional[str] = None
+
+
 class WorkoutLogUpdate(BaseModel):
     raw_text: Optional[str] = None
     log_date: Optional[date] = None
+    duration_min: Optional[int] = None
+    calories_burnt: Optional[int] = None
 
 
 class WorkoutLogOut(BaseModel):

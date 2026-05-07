@@ -11,7 +11,7 @@ from telegram_bot.handlers.journal import handle_journal
 from telegram_bot.handlers.search import handle_search
 from telegram_bot.handlers.start import handle_help, handle_start
 from telegram_bot.handlers.tasks import handle_done, handle_tasks
-from telegram_bot.handlers.workout import handle_genplan, handle_logworkout, handle_workout
+from telegram_bot.handlers.workout import handle_editworkout, handle_genplan, handle_logworkout, handle_workout
 
 
 def main():
@@ -27,6 +27,7 @@ def main():
     app.add_handler(CommandHandler("workout", handle_workout))
     app.add_handler(CommandHandler("logworkout", handle_logworkout))
     app.add_handler(CommandHandler("genplan", handle_genplan))
+    app.add_handler(CommandHandler("editworkout", handle_editworkout))
 
     # Inline button callbacks (approve / reject user)
     app.add_handler(CallbackQueryHandler(handle_approval_callback, pattern=r"^(approve|reject):\d+$"))

@@ -392,38 +392,44 @@
                   </div>
                 </div>
 
-                <!-- Body -->
-                <div style="font-size:13px;color:#4A4940;line-height:1.5" x-text="log.raw_text"></div>
-                <template x-if="log.summary && log.summary !== log.raw_text">
-                  <div style="font-size:12px;color:#78776E;margin-top:5px;font-style:italic" x-text="log.summary"></div>
-                </template>
+                <!-- Summary (always visible) -->
+                <div style="font-size:13px;color:#4A4940;line-height:1.5" x-text="log.summary || log.raw_text"></div>
 
-                <!-- Structured exercises -->
+                <!-- Collapsible exercises -->
                 <template x-if="log.exercises && log.exercises.length > 0">
-                  <div style="margin-top:10px;border-top:1px solid #F0EFE9;padding-top:8px">
-                    <table style="width:100%;border-collapse:collapse;font-size:12px">
-                      <thead>
-                        <tr style="color:#ABAAA5">
-                          <th style="text-align:left;padding:2px 0;font-weight:500">Exercise</th>
-                          <th style="text-align:center;padding:2px 8px;font-weight:500">Sets</th>
-                          <th style="text-align:center;padding:2px 8px;font-weight:500">Reps</th>
-                          <th style="text-align:center;padding:2px 8px;font-weight:500">kg</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <template x-for="ex in log.exercises" :key="ex.id">
-                          <tr style="border-top:1px solid #F0EFE9">
-                            <td style="padding:4px 0;font-weight:500;color:#1A1917">
-                              <span x-text="ex.exercise_name"></span>
-                              <span x-show="ex.source === 'ai'" style="font-size:10px;color:#ABAAA5;margin-left:4px;font-weight:400">AI</span>
-                            </td>
-                            <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.sets || '—'"></td>
-                            <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.reps || '—'"></td>
-                            <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.weight_kg != null ? ex.weight_kg : '—'"></td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
+                  <div style="margin-top:8px">
+                    <button @click="toggleLog(log.id)"
+                      style="font-size:11.5px;color:#78776E;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;display:flex;align-items:center;gap:4px">
+                      <span x-text="expandedLogs[log.id] ? '▲' : '▶'"></span>
+                      <span x-text="expandedLogs[log.id] ? 'Hide exercises' : log.exercises.length + (log.exercises.length > 1 ? ' exercises' : ' exercise')"></span>
+                    </button>
+                    <template x-if="expandedLogs[log.id]">
+                      <div style="margin-top:8px;border-top:1px solid #F0EFE9;padding-top:8px">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px">
+                          <thead>
+                            <tr style="color:#ABAAA5">
+                              <th style="text-align:left;padding:2px 0;font-weight:500">Exercise</th>
+                              <th style="text-align:center;padding:2px 8px;font-weight:500">Sets</th>
+                              <th style="text-align:center;padding:2px 8px;font-weight:500">Reps</th>
+                              <th style="text-align:center;padding:2px 8px;font-weight:500">kg</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <template x-for="ex in log.exercises" :key="ex.id">
+                              <tr style="border-top:1px solid #F0EFE9">
+                                <td style="padding:4px 0;font-weight:500;color:#1A1917">
+                                  <span x-text="ex.exercise_name"></span>
+                                  <span x-show="ex.source === 'ai'" style="font-size:10px;color:#ABAAA5;margin-left:4px;font-weight:400">AI</span>
+                                </td>
+                                <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.sets || '—'"></td>
+                                <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.reps || '—'"></td>
+                                <td style="text-align:center;padding:4px 8px;color:#4A4940" x-text="ex.weight_kg != null ? ex.weight_kg : '—'"></td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </div>
+                    </template>
                   </div>
                 </template>
               </div>
@@ -530,6 +536,18 @@
       <input type="date" x-model="editDate" class="input" style="width:auto" />
     </div>
 
+    <!-- Duration & Calories -->
+    <div style="display:flex;gap:12px;margin-bottom:16px">
+      <div style="flex:1">
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Duration (min)</label>
+        <input type="number" x-model.number="editDurationMin" class="input" placeholder="45" min="1" style="width:100%;box-sizing:border-box" />
+      </div>
+      <div style="flex:1">
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Calories (kcal)</label>
+        <input type="number" x-model.number="editCaloriesBurnt" class="input" placeholder="350" min="1" style="width:100%;box-sizing:border-box" />
+      </div>
+    </div>
+
     <!-- Exercises -->
     <div style="margin-bottom:18px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -547,10 +565,10 @@
           </div>
           <template x-for="(ex, i) in editExercises" :key="i">
             <div x-show="!ex._delete" style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px;align-items:center">
-              <input type="text"   x-model="editExercises[i].exercise_name" class="ex-input" placeholder="Bench Press" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
-              <input type="number" x-model.number="editExercises[i].sets"      class="ex-input" placeholder="3"    min="1"    style="text-align:center" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
-              <input type="text"   x-model="editExercises[i].reps"             class="ex-input" placeholder="8–10"             style="text-align:center" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
-              <input type="number" x-model.number="editExercises[i].weight_kg" class="ex-input" placeholder="60"   step="0.5"  style="text-align:center" :disabled="!ex._isNew" :style="!ex._isNew ? 'background:#F6F5F2;color:#78776E' : ''" />
+              <input type="text"   x-model="editExercises[i].exercise_name" class="ex-input" placeholder="Bench Press" />
+              <input type="number" x-model.number="editExercises[i].sets"      class="ex-input" placeholder="3"    min="1"   style="text-align:center" />
+              <input type="text"   x-model="editExercises[i].reps"             class="ex-input" placeholder="8–10"          style="text-align:center" />
+              <input type="number" x-model.number="editExercises[i].weight_kg" class="ex-input" placeholder="60"   step="0.5" style="text-align:center" />
               <button type="button" @click="editExercises[i]._delete = true"
                 style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:15px;line-height:1;padding:0;text-align:center">✕</button>
             </div>
@@ -617,9 +635,12 @@ function workoutApp() {
     editingLog: null,
     editText: '',
     editDate: '',
+    editDurationMin: null,
+    editCaloriesBurnt: null,
     editExercises: [],
     editSubmitting: false,
     deletingId: null,
+    expandedLogs: {},
 
     get filteredLogs() {
       if (this.timeRange === 'all') return this.logs;
@@ -694,6 +715,8 @@ function workoutApp() {
 
     toggleDay(key) { this.expandedDay = this.expandedDay === key ? null : key; },
 
+    toggleLog(id) { this.expandedLogs[id] = !this.expandedLogs[id]; },
+
     async generatePlan() {
       if (this.generating) return;
       this.generating = true;
@@ -748,7 +771,8 @@ function workoutApp() {
       this.editingLog = log;
       this.editText = log.raw_text;
       this.editDate = log.log_date;
-      // Existing exercises are read-only (name/sets/reps/kg greyed out); only deletable
+      this.editDurationMin = log.duration_min || null;
+      this.editCaloriesBurnt = log.calories_burnt || null;
       this.editExercises = (log.exercises || []).map(e => ({ ...e, _isNew: false, _delete: false }));
       this.showEditModal = true;
     },
@@ -761,20 +785,34 @@ function workoutApp() {
       if (!this.editText.trim() || this.editSubmitting) return;
       this.editSubmitting = true;
       try {
+        const textChanged = this.editText.trim() !== this.editingLog.raw_text;
         await API.patch(`/workout/logs/${this.editingLog.id}`, {
           raw_text: this.editText.trim(),
           log_date: this.editDate || null,
+          duration_min: this.editDurationMin || null,
+          calories_burnt: this.editCaloriesBurnt || null,
         });
         // Delete exercises marked for removal
         for (const ex of this.editExercises.filter(e => !e._isNew && e._delete)) {
           await API.delete(`/workout/logs/${this.editingLog.id}/exercises/${ex.id}`);
+        }
+        // Patch existing exercises (only when text didn't change, to avoid conflicts with AI re-parse)
+        if (!textChanged) {
+          for (const ex of this.editExercises.filter(e => !e._isNew && !e._delete)) {
+            await API.patch(`/workout/logs/${this.editingLog.id}/exercises/${ex.id}`, {
+              exercise_name: ex.exercise_name.trim(),
+              sets: ex.sets || null,
+              reps: (ex.reps || '').trim() || null,
+              weight_kg: ex.weight_kg || null,
+            });
+          }
         }
         // Add new exercises
         for (const ex of this.editExercises.filter(e => e._isNew && !e._delete && e.exercise_name.trim())) {
           await API.post(`/workout/logs/${this.editingLog.id}/exercises`, {
             exercise_name: ex.exercise_name.trim(),
             sets: ex.sets || null,
-            reps: ex.reps.trim() || null,
+            reps: (ex.reps || '').trim() || null,
             weight_kg: ex.weight_kg || null,
           });
         }

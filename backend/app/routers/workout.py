@@ -14,6 +14,7 @@ from app.routers.auth import require_approved
 from app.schemas.workout import (
     WorkoutExerciseCreate,
     WorkoutExerciseOut,
+    WorkoutExerciseUpdate,
     WorkoutInsightsOut,
     WorkoutLogCreate,
     WorkoutLogOut,
@@ -137,11 +138,44 @@ async def update_log(
                 source="ai",
             ))
 
+    if body.duration_min is not None:
+        log.duration_min = body.duration_min
+    if body.calories_burnt is not None:
+        log.calories_burnt = body.calories_burnt
+
     await db.commit()
     log = (await db.execute(
         select(WorkoutLog).options(selectinload(WorkoutLog.exercises)).where(WorkoutLog.id == log_id)
     )).scalar_one()
     return log
+
+
+@router.patch("/logs/{log_id}/exercises/{exercise_id}", response_model=WorkoutExerciseOut)
+async def update_exercise(
+    log_id: int,
+    exercise_id: int,
+    body: WorkoutExerciseUpdate,
+    current_user: User = Depends(require_approved),
+    db: AsyncSession = Depends(get_db),
+):
+    ex = (await db.execute(
+        select(WorkoutExercise)
+        .join(WorkoutLog, WorkoutLog.id == WorkoutExercise.log_id)
+        .where(
+            WorkoutExercise.id == exercise_id,
+            WorkoutExercise.log_id == log_id,
+            WorkoutLog.user_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(ex, field, value)
+
+    await db.commit()
+    await db.refresh(ex)
+    return ex
 
 
 @router.delete("/logs/{log_id}", status_code=204)

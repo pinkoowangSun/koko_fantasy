@@ -9,6 +9,7 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -19,7 +20,7 @@ from app.models.memory import MemoryItem
 from app.models.reminder import Reminder
 from app.models.task import Task
 from app.models.user import User
-from app.models.workout import WorkoutLog, WorkoutPlan
+from app.models.workout import WorkoutExercise, WorkoutLog, WorkoutPlan
 from app.services.ai_service import (
     classify_intent,
     generate_briefing,
@@ -953,6 +954,82 @@ async def bot_generate_plan(body: BotGeneratePlan, db: AsyncSession = Depends(ge
     user = await _require_user(body.telegram_id, db)
     result = await _handle_generate_workout_plan(user, db)
     return {"ok": True, "notes": result["data"].get("notes", "")}
+
+
+@router.get("/workout/log", dependencies=[Depends(_bot_auth)])
+async def bot_get_workout_log(telegram_id: int, log_date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(telegram_id, db)
+    target_date = date.fromisoformat(log_date) if log_date else _local_date(user)
+    log = (await db.execute(
+        select(WorkoutLog)
+        .options(selectinload(WorkoutLog.exercises))
+        .where(WorkoutLog.user_id == user.id, WorkoutLog.log_date == target_date)
+        .order_by(WorkoutLog.created_at.desc())
+    )).scalars().first()
+    if not log:
+        return {"found": False, "message": f"No workout found for {target_date}."}
+
+    lines = [f"📋 *Workout — {target_date}*", f"_{log.summary or log.raw_text[:120]}_"]
+    if log.duration_min:
+        lines.append(f"⏱ Duration: {log.duration_min} min")
+    if log.calories_burnt:
+        lines.append(f"🔥 Calories: {log.calories_burnt} kcal")
+    exercises = sorted(log.exercises, key=lambda e: e.id)
+    if exercises:
+        lines.append("\n*Exercises:*")
+        for i, ex in enumerate(exercises, 1):
+            parts = [f"{i}. {ex.exercise_name}"]
+            details = []
+            if ex.sets:      details.append(f"{ex.sets} sets")
+            if ex.reps:      details.append(f"{ex.reps} reps")
+            if ex.weight_kg: details.append(f"{ex.weight_kg} kg")
+            if details:      parts.append("— " + ", ".join(details))
+            lines.append(" ".join(parts))
+    lines.append("\n_Edit: /editworkout duration=45 calories=350 or /editworkout ex=1 sets=3 reps=8 kg=60_")
+    return {"found": True, "message": "\n".join(lines)}
+
+
+class BotWorkoutEdit(BaseModel):
+    telegram_id: int
+    log_date: Optional[str] = None
+    duration_min: Optional[int] = None
+    calories_burnt: Optional[int] = None
+    exercise_index: Optional[int] = None
+    sets: Optional[int] = None
+    reps: Optional[str] = None
+    weight_kg: Optional[float] = None
+
+
+@router.patch("/workout/edit", dependencies=[Depends(_bot_auth)])
+async def bot_edit_workout(body: BotWorkoutEdit, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    target_date = date.fromisoformat(body.log_date) if body.log_date else _local_date(user)
+    log = (await db.execute(
+        select(WorkoutLog)
+        .options(selectinload(WorkoutLog.exercises))
+        .where(WorkoutLog.user_id == user.id, WorkoutLog.log_date == target_date)
+        .order_by(WorkoutLog.created_at.desc())
+    )).scalars().first()
+    if not log:
+        return {"ok": False, "message": f"No workout found for {target_date}."}
+
+    if body.duration_min is not None:
+        log.duration_min = body.duration_min
+    if body.calories_burnt is not None:
+        log.calories_burnt = body.calories_burnt
+
+    if body.exercise_index is not None:
+        exercises = sorted(log.exercises, key=lambda e: e.id)
+        idx = body.exercise_index - 1
+        if not (0 <= idx < len(exercises)):
+            return {"ok": False, "message": f"Exercise #{body.exercise_index} not found. Log has {len(exercises)} exercise(s)."}
+        ex = exercises[idx]
+        if body.sets is not None:      ex.sets = body.sets
+        if body.reps is not None:      ex.reps = body.reps
+        if body.weight_kg is not None: ex.weight_kg = body.weight_kg
+
+    await db.commit()
+    return {"ok": True, "message": f"✅ Workout for {target_date} updated."}
 
 
 # ── Media (stub — expanded per domain as features are added) ──────────────────
