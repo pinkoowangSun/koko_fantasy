@@ -305,6 +305,151 @@ Rules:
         }
 
 
+# ── Finance helpers ───────────────────────────────────────────────────────────
+
+async def parse_finance_transaction(user_id: int, text: str) -> dict:
+    """
+    Extract structured transaction data from free text.
+    Returns dict with: amount, transaction_type, category, currency, description, transaction_date
+    """
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    prompt = (
+        f'Today is {today}. Extract a financial transaction from this text and return JSON:\n'
+        '{{\n'
+        '  "amount": <positive float>,\n'
+        '  "transaction_type": "<income|expense|transfer>",\n'
+        '  "category": "<food|grocery|transport|housing|utilities|entertainment|health|education|gift|shopping|travel|salary|freelance|investment|other>",\n'
+        '  "currency": "<3-letter code, e.g. SGD, USD — default SGD if not mentioned>",\n'
+        '  "description": "<brief description or null>",\n'
+        '  "transaction_date": "<ISO date YYYY-MM-DD, today if not mentioned>",\n'
+        '  "record_type": "transaction"\n'
+        '}}\n\n'
+        f'Text: {text}\n\n'
+        'Rules:\n'
+        '- "spent", "paid", "bought", "cost" → expense\n'
+        '- "received", "earned", "salary", "income", "got paid" → income\n'
+        '- amount is always positive\n'
+        '- Return valid JSON only.'
+    )
+    resp = await _client.chat.completions.create(
+        model=settings.DEEPSEEK_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a financial data extractor. Output valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
+    try:
+        return json.loads(resp.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {
+            "amount": 0.0, "transaction_type": "expense", "category": "other",
+            "currency": "SGD", "description": text[:100], "transaction_date": today,
+            "record_type": "transaction",
+        }
+
+
+async def parse_finance_goal(user_id: int, text: str) -> dict:
+    """
+    Extract a finance goal from free text.
+    Returns dict with: title, goal_type, term, target_amount, currency, deadline, record_type
+    """
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    prompt = (
+        f'Today is {today}. Extract a financial goal from this text and return JSON:\n'
+        '{{\n'
+        '  "title": "<short goal title>",\n'
+        '  "goal_type": "<spending_limit|saving_target|income_target|custom>",\n'
+        '  "term": "<short|mid|long>",\n'
+        '  "target_amount": <positive float>,\n'
+        '  "currency": "<3-letter code, default SGD>",\n'
+        '  "deadline": "<ISO date YYYY-MM-DD or null>",\n'
+        '  "record_type": "goal"\n'
+        '}}\n\n'
+        f'Text: {text}\n\n'
+        'Rules:\n'
+        '- saving_target: "save X", "put aside X", "reach X savings"\n'
+        '- spending_limit: "spend max X", "keep spending under X", "budget X"\n'
+        '- term: short < 3 months, mid 3–12 months, long > 12 months\n'
+        '- Return valid JSON only.'
+    )
+    resp = await _client.chat.completions.create(
+        model=settings.DEEPSEEK_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a financial goal extractor. Output valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
+    try:
+        return json.loads(resp.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {
+            "title": text[:80], "goal_type": "saving_target", "term": "mid",
+            "target_amount": 0.0, "currency": "SGD", "deadline": None, "record_type": "goal",
+        }
+
+
+async def generate_finance_insights(user_id: int, summary_data: dict) -> dict:
+    """Generate LLM-powered finance insights from 30-day transaction data."""
+    if not summary_data.get("transactions"):
+        return {
+            "summary": "No transactions recorded in the past 30 days. Start logging your income and expenses to get personalised insights!",
+            "top_categories": [],
+            "income_trend": "No data available.",
+            "expense_trend": "No data available.",
+            "goal_status_note": "Add financial goals to track your progress.",
+            "advice": ["Log your first transaction to get started."],
+        }
+
+    data_str = json.dumps(summary_data, indent=2)
+    prompt = f"""\
+You are a personal finance advisor. Analyse the following 30-day financial data and return structured insights.
+
+DATA:
+{data_str}
+
+Return ONLY this JSON (no markdown fences):
+{{
+  "summary": "<2-3 sentence overview of the user's financial health this month>",
+  "top_categories": ["<top spending category 1>", "<top spending category 2>", "<top spending category 3>"],
+  "income_trend": "<1 sentence about income pattern>",
+  "expense_trend": "<1 sentence about spending pattern and any concerns>",
+  "goal_status_note": "<1 sentence about goal progress, or encouragement if no goals>",
+  "advice": ["<actionable advice 1>", "<actionable advice 2>", "<actionable advice 3>"]
+}}
+
+Rules:
+- Be specific — reference actual amounts, categories, and patterns from the data
+- advice: concrete next steps the user can take this week (exactly 3 items)
+- Keep a positive but honest tone
+"""
+    resp = await _client.chat.completions.create(
+        model=settings.DEEPSEEK_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a personal finance advisor. Output valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.5,
+        response_format={"type": "json_object"},
+    )
+    try:
+        return json.loads(resp.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {
+            "summary": "Unable to generate insights at this time. Please try again.",
+            "top_categories": [],
+            "income_trend": "Analysis unavailable.",
+            "expense_trend": "Analysis unavailable.",
+            "goal_status_note": "Analysis unavailable.",
+            "advice": ["Please try again later."],
+        }
+
+
 _WEEK_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
 

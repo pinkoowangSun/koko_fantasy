@@ -11,6 +11,7 @@ from telegram_bot.handlers.journal import handle_journal
 from telegram_bot.handlers.search import handle_search
 from telegram_bot.handlers.start import handle_help, handle_start
 from telegram_bot.handlers.tasks import handle_done, handle_tasks
+from telegram_bot.handlers.finance import handle_addgoal, handle_balance, handle_delgoal, handle_finance_goals, handle_income, handle_spend
 from telegram_bot.handlers.workout import handle_editworkout, handle_genplan, handle_logworkout, handle_workout
 
 
@@ -28,6 +29,12 @@ def main():
     app.add_handler(CommandHandler("logworkout", handle_logworkout))
     app.add_handler(CommandHandler("genplan", handle_genplan))
     app.add_handler(CommandHandler("editworkout", handle_editworkout))
+    app.add_handler(CommandHandler("spend", handle_spend))
+    app.add_handler(CommandHandler("income", handle_income))
+    app.add_handler(CommandHandler("balance", handle_balance))
+    app.add_handler(CommandHandler("goals", handle_finance_goals))
+    app.add_handler(CommandHandler("addgoal", handle_addgoal))
+    app.add_handler(CommandHandler("delgoal", handle_delgoal))
 
     # Inline button callbacks (approve / reject user)
     app.add_handler(CallbackQueryHandler(handle_approval_callback, pattern=r"^(approve|reject):\d+$"))

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     DOCUMENTS_DIR: Path = BASE_DIR / "data" / "documents"
     VECTORS_DIR: Path = BASE_DIR / "data" / "vectors"
 
+    # Asset encryption (Fernet key — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    ASSET_ENCRYPTION_KEY: str = ""
+
     # Super admin
     SUPER_ADMIN_TELEGRAM_ID: int = 5429764884
 

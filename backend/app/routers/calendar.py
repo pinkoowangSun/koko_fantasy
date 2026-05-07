@@ -6,8 +6,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, or_, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from collections import defaultdict
+
 from app.database import get_db
 from app.models.document import Document
+from app.models.finance import Transaction
 from app.models.journal import JournalEntry
 from app.models.task import Task
 from app.models.user import User
@@ -110,6 +113,36 @@ async def get_events(
             "extendedProps": {"type": "document", "ref_id": d.id},
         })
 
+    # Finance: one net-per-currency event per day
+    fin_txs = (await db.execute(
+        select(Transaction).where(
+            Transaction.user_id == uid,
+            Transaction.transaction_date >= start,
+            Transaction.transaction_date <= end,
+        )
+    )).scalars().all()
+
+    # Group by (date, currency) → net
+    fin_by_day: dict[tuple, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for t in fin_txs:
+        sign = 1 if t.transaction_type == "income" else -1
+        fin_by_day[t.transaction_date][t.currency] += sign * t.amount
+
+    for day_date, by_currency in fin_by_day.items():
+        parts = []
+        for cur, net in sorted(by_currency.items()):
+            parts.append(f"{'+'if net>=0 else ''}{net:,.0f} {cur}")
+        label = " · ".join(parts)
+        color = "#10b981" if all(v >= 0 for v in by_currency.values()) else "#ef4444"
+        events.append({
+            "id": f"finance-{day_date.isoformat()}",
+            "title": f"💰 {label}",
+            "start": day_date.isoformat(),
+            "backgroundColor": color,
+            "borderColor": color,
+            "extendedProps": {"type": "finance"},
+        })
+
     return events
 
 
@@ -145,6 +178,21 @@ async def get_day_detail(
         )
     )).scalars().all()
 
+    finance_txs = (await db.execute(
+        select(Transaction).where(
+            Transaction.user_id == uid,
+            Transaction.transaction_date == day,
+        ).order_by(Transaction.created_at.desc())
+    )).scalars().all()
+
+    fin_income: dict[str, float] = defaultdict(float)
+    fin_expense: dict[str, float] = defaultdict(float)
+    for t in finance_txs:
+        if t.transaction_type == "income":
+            fin_income[t.currency] += t.amount
+        elif t.transaction_type == "expense":
+            fin_expense[t.currency] += t.amount
+
     return {
         "date": day.isoformat(),
         "tasks": [
@@ -167,6 +215,15 @@ async def get_day_detail(
             {"id": d.id, "original_name": d.original_name, "source": d.source}
             for d in docs
         ],
+        "finance": {
+            "income_by_currency": {k: round(v, 2) for k, v in fin_income.items()},
+            "expense_by_currency": {k: round(v, 2) for k, v in fin_expense.items()},
+            "transactions": [
+                {"id": t.id, "amount": t.amount, "transaction_type": t.transaction_type,
+                 "category": t.category, "currency": t.currency, "description": t.description}
+                for t in finance_txs
+            ],
+        },
     }
 
 
@@ -197,6 +254,21 @@ async def get_today_summary(
         ).order_by(JournalEntry.created_at.desc())
     )).scalars().all()
 
+    finance_txs = (await db.execute(
+        select(Transaction).where(
+            Transaction.user_id == uid,
+            Transaction.transaction_date == today,
+        ).order_by(Transaction.created_at.desc())
+    )).scalars().all()
+
+    fin_income: dict[str, float] = defaultdict(float)
+    fin_expense: dict[str, float] = defaultdict(float)
+    for t in finance_txs:
+        if t.transaction_type == "income":
+            fin_income[t.currency] += t.amount
+        elif t.transaction_type == "expense":
+            fin_expense[t.currency] += t.amount
+
     return {
         "date": today.isoformat(),
         "tasks": [
@@ -213,4 +285,13 @@ async def get_today_summary(
             }
             for j in journal
         ],
+        "finance": {
+            "income_by_currency": {k: round(v, 2) for k, v in fin_income.items()},
+            "expense_by_currency": {k: round(v, 2) for k, v in fin_expense.items()},
+            "transactions": [
+                {"id": t.id, "amount": t.amount, "transaction_type": t.transaction_type,
+                 "category": t.category, "currency": t.currency, "description": t.description}
+                for t in finance_txs
+            ],
+        },
     }

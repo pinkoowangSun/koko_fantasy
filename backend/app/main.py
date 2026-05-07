@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, bot, briefing, calendar, documents, journal, memory, search, tasks, users, workout
+from app.routers import auth, bot, briefing, calendar, documents, finance, journal, memory, search, tasks, users, workout
 from app.services.reminder_service import start_scheduler, stop_scheduler
 
 FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
@@ -33,7 +33,7 @@ app.add_middleware(
 )
 
 # ── API routes ────────────────────────────────────────────────────────────────
-for r in [auth, tasks, journal, documents, memory, briefing, search, users, calendar, bot, workout]:
+for r in [auth, tasks, journal, documents, memory, briefing, search, users, calendar, bot, workout, finance]:
     app.include_router(r.router, prefix="/api")
 
 
@@ -76,3 +76,7 @@ if FRONTEND_DIR.exists():
     @app.get("/users")
     async def serve_users():
         return FileResponse(str(FRONTEND_DIR / "pages" / "users.html"))
+
+    @app.get("/finance")
+    async def serve_finance():
+        return FileResponse(str(FRONTEND_DIR / "pages" / "finance.html"))

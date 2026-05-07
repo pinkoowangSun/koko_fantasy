@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models.document import Document
+from app.models.finance import FinanceGoal, Transaction
 from app.models.journal import JournalEntry
 from app.models.memory import MemoryItem
 from app.models.reminder import Reminder
@@ -26,6 +27,9 @@ from app.services.ai_service import (
     classify_intent,
     generate_briefing,
     generate_contextual_response,
+    generate_finance_insights,
+    parse_finance_transaction,
+    parse_finance_goal,
     parse_workout_log,
     generate_workout_plan,
 )
@@ -647,6 +651,216 @@ async def _handle_generate_briefing(user: User, db: AsyncSession) -> dict:
     return {"response": briefing, "data": {}}
 
 
+async def _handle_create_finance_transaction(data: dict, user: User, db: AsyncSession) -> dict:
+    from app.routers.finance import _tx_to_out
+    tx_date = None
+    if data.get("transaction_date"):
+        try:
+            tx_date = date.fromisoformat(data["transaction_date"])
+        except ValueError:
+            pass
+    tx = Transaction(
+        user_id=user.id,
+        amount=float(data.get("amount", 0) or 0),
+        transaction_type=data.get("transaction_type", "expense"),
+        category=data.get("category", "other"),
+        currency=(data.get("currency") or "SGD").upper(),
+        description=data.get("description"),
+        transaction_date=tx_date or _local_date(user),
+        source="telegram",
+    )
+    db.add(tx)
+    await db.commit()
+    sign = "+" if tx.transaction_type == "income" else "-"
+    return {
+        "response": f"💰 Logged: {sign}{tx.amount:.0f} {tx.currency} ({tx.category}){f' — {tx.description}' if tx.description else ''}",
+        "data": {"id": tx.id},
+    }
+
+
+async def _handle_delete_finance_transaction(data: dict, user: User, db: AsyncSession) -> dict:
+    tx_id = data.get("transaction_id")
+    if not tx_id:
+        return {"response": "Please specify the transaction ID to delete.", "data": {}}
+    tx = (await db.execute(
+        select(Transaction).where(Transaction.id == int(tx_id), Transaction.user_id == user.id)
+    )).scalar_one_or_none()
+    if not tx:
+        return {"response": f"No transaction #{tx_id} found.", "data": {}}
+    await db.delete(tx)
+    await db.commit()
+    return {"response": f"🗑 Transaction #{tx_id} deleted.", "data": {}}
+
+
+async def _handle_create_finance_goal(data: dict, user: User, db: AsyncSession) -> dict:
+    goal = FinanceGoal(
+        user_id=user.id,
+        title=data.get("title", "My Goal"),
+        goal_type=data.get("goal_type", "saving_target"),
+        term=data.get("term", "mid"),
+        target_amount=float(data.get("target_amount", 0) or 0),
+        currency=(data.get("currency") or "SGD").upper(),
+        deadline=date.fromisoformat(data["deadline"]) if data.get("deadline") else None,
+    )
+    db.add(goal)
+    await db.commit()
+    deadline_str = f" by {goal.deadline}" if goal.deadline else ""
+    return {
+        "response": f"🎯 Goal set: *{goal.title}* — {goal.goal_type.replace('_', ' ').title()} {goal.target_amount:.0f} {goal.currency}{deadline_str}",
+        "data": {"id": goal.id},
+    }
+
+
+async def _handle_update_finance_goal(data: dict, user: User, db: AsyncSession) -> dict:
+    identifier = data.get("goal_id_or_title", "")
+    goal = None
+    if identifier:
+        try:
+            goal = (await db.execute(
+                select(FinanceGoal).where(FinanceGoal.id == int(identifier), FinanceGoal.user_id == user.id)
+            )).scalar_one_or_none()
+        except (ValueError, TypeError):
+            pass
+        if not goal:
+            goal = (await db.execute(
+                select(FinanceGoal).where(
+                    FinanceGoal.user_id == user.id,
+                    FinanceGoal.title.ilike(f"%{identifier}%"),
+                    FinanceGoal.status == "active",
+                )
+            )).scalars().first()
+    if not goal:
+        return {"response": "Couldn't find that goal. Use /goals to see your active goals.", "data": {}}
+
+    updated = []
+    if data.get("target_amount") is not None:
+        goal.target_amount = float(data["target_amount"])
+        updated.append(f"target → {goal.target_amount:.0f}")
+    if data.get("manual_current") is not None:
+        goal.manual_current = float(data["manual_current"])
+        updated.append(f"current → {goal.manual_current:.0f}")
+    if data.get("deadline"):
+        try:
+            goal.deadline = date.fromisoformat(data["deadline"])
+            updated.append(f"deadline → {goal.deadline}")
+        except ValueError:
+            pass
+    if data.get("status"):
+        goal.status = data["status"]
+        updated.append(f"status → {goal.status}")
+    if data.get("title"):
+        goal.title = data["title"]
+        updated.append(f"title → {goal.title}")
+    goal.updated_at = datetime.utcnow()
+    await db.commit()
+    if not updated:
+        return {"response": "Not sure what to update — try mentioning target amount, current amount, or deadline.", "data": {}}
+    return {"response": f"✏️ Goal *{goal.title}* updated: {', '.join(updated)}.", "data": {}}
+
+
+async def _handle_delete_finance_goal(data: dict, user: User, db: AsyncSession) -> dict:
+    identifier = data.get("goal_id_or_title", "")
+    goal = None
+    if identifier:
+        try:
+            goal = (await db.execute(
+                select(FinanceGoal).where(FinanceGoal.id == int(identifier), FinanceGoal.user_id == user.id)
+            )).scalar_one_or_none()
+        except (ValueError, TypeError):
+            pass
+        if not goal:
+            goal = (await db.execute(
+                select(FinanceGoal).where(
+                    FinanceGoal.user_id == user.id,
+                    FinanceGoal.title.ilike(f"%{identifier}%"),
+                )
+            )).scalars().first()
+    if not goal:
+        return {"response": "Couldn't find that goal.", "data": {}}
+    title = goal.title
+    await db.delete(goal)
+    await db.commit()
+    return {"response": f"🗑 Goal *{title}* deleted.", "data": {}}
+
+
+async def _handle_list_finance_transactions(data: dict, user: User, db: AsyncSession) -> dict:
+    from collections import defaultdict as _dd
+    thirty_ago = date.today() - timedelta(days=30)
+    txs = (await db.execute(
+        select(Transaction)
+        .where(Transaction.user_id == user.id, Transaction.transaction_date >= thirty_ago)
+        .order_by(Transaction.transaction_date.desc())
+        .limit(10)
+    )).scalars().all()
+    if not txs:
+        return {"response": "No transactions in the past 30 days. Use /spend or /income to log.", "data": {}}
+    lines = [f"💳 *Last {len(txs)} transactions (30 days):*"]
+    for t in txs:
+        sign = "+" if t.transaction_type == "income" else "-"
+        lines.append(f"{sign}{t.amount:.0f} {t.currency} [{t.category}] {t.transaction_date}" + (f" — {t.description}" if t.description else ""))
+    return {"response": "\n".join(lines), "data": {}}
+
+
+async def _handle_read_finance_goals(user: User, db: AsyncSession) -> dict:
+    from app.routers.finance import _goal_to_out
+    goals = (await db.execute(
+        select(FinanceGoal)
+        .where(FinanceGoal.user_id == user.id, FinanceGoal.status == "active")
+        .order_by(FinanceGoal.created_at.desc())
+    )).scalars().all()
+    if not goals:
+        return {"response": "No active financial goals. Use /addgoal to create one!", "data": {}}
+
+    txs = (await db.execute(
+        select(Transaction).where(Transaction.user_id == user.id)
+    )).scalars().all()
+
+    labels = {"on_track": "🟢 On Track", "beyond": "✨ Beyond", "at_risk": "🔴 At Risk"}
+    lines = [f"🎯 *Your finance goals ({len(goals)}):*"]
+    for g in goals:
+        out = _goal_to_out(g, txs)
+        bar = int(out.progress_pct / 10)
+        bar_str = "█" * bar + "░" * (10 - bar)
+        status_str = labels.get(out.status_label, "🟡")
+        proj = f" | ETA: {out.projected_end}" if out.projected_end else ""
+        lines.append(
+            f"\n*{g.title}*\n"
+            f"{status_str} [{bar_str}] {out.progress_pct:.0f}%\n"
+            f"{out.current_amount:.0f} / {g.target_amount:.0f} {g.currency}{proj}"
+        )
+    return {"response": "\n".join(lines), "data": {}}
+
+
+async def _handle_generate_finance_insights(user: User, db: AsyncSession) -> dict:
+    thirty_ago = date.today() - timedelta(days=30)
+    txs = (await db.execute(
+        select(Transaction)
+        .where(Transaction.user_id == user.id, Transaction.transaction_date >= thirty_ago)
+        .order_by(Transaction.transaction_date.asc())
+    )).scalars().all()
+    goals = (await db.execute(
+        select(FinanceGoal).where(FinanceGoal.user_id == user.id, FinanceGoal.status == "active")
+    )).scalars().all()
+    tx_data = [{"date": t.transaction_date.isoformat(), "type": t.transaction_type, "amount": t.amount,
+                "currency": t.currency, "category": t.category} for t in txs]
+    goal_data = [{"title": g.title, "type": g.goal_type, "target": g.target_amount, "currency": g.currency} for g in goals]
+    result = await generate_finance_insights(user.id, {"transactions": tx_data, "goals": goal_data})
+    lines = [
+        "📊 *Finance Insights (last 30 days)*",
+        "",
+        result.get("summary", ""),
+        "",
+        f"📈 Income: {result.get('income_trend', '')}",
+        f"📉 Expenses: {result.get('expense_trend', '')}",
+        f"🎯 Goals: {result.get('goal_status_note', '')}",
+    ]
+    advice = result.get("advice", [])
+    if advice:
+        lines.append("\n💡 *Advice:*")
+        lines.extend(f"• {a}" for a in advice)
+    return {"response": "\n".join(lines), "data": {}}
+
+
 async def _handle_query_document(data: dict, user: User) -> dict:
     question = data.get("question", data.get("query", ""))
     answer = await query_and_answer(user.id, question)
@@ -683,6 +897,24 @@ async def _execute_write(action: str, domain: str, data: dict, user: User, db: A
                 return await _handle_create_memory(data, user, db)
             elif action == "delete":
                 return await _handle_delete_memory(data, user, db)
+        elif domain == "finance":
+            record_type = data.get("record_type", "transaction")
+            if action == "create":
+                if record_type == "goal":
+                    return await _handle_create_finance_goal(data, user, db)
+                else:
+                    # If no amount extracted yet, parse from raw message via LLM
+                    if not data.get("amount"):
+                        return {"response": "Please specify an amount (e.g. 'spent 50 SGD on food').", "data": {}}
+                    return await _handle_create_finance_transaction(data, user, db)
+            elif action == "delete":
+                if record_type == "goal":
+                    return await _handle_delete_finance_goal(data, user, db)
+                else:
+                    return await _handle_delete_finance_transaction(data, user, db)
+            elif action == "update":
+                if record_type == "goal":
+                    return await _handle_update_finance_goal(data, user, db)
     except Exception as exc:
         print(f"[bot] execute_write failed {action}+{domain}: {exc}")
 
@@ -707,6 +939,13 @@ async def _execute_read(action: str, domain: str, data: dict, user: User, db: As
                 return await _handle_query_document(data, user)
             elif action == "search":
                 return await _handle_query_document(data, user)
+        elif domain == "finance":
+            if action == "list":
+                return await _handle_list_finance_transactions(data, user, db)
+            elif action == "read":
+                return await _handle_read_finance_goals(user, db)
+            elif action == "generate":
+                return await _handle_generate_finance_insights(user, db)
     except Exception as exc:
         print(f"[bot] execute_read failed {action}+{domain}: {exc}")
 
@@ -1113,6 +1352,132 @@ async def bot_edit_workout(body: BotWorkoutEdit, db: AsyncSession = Depends(get_
 
     await db.commit()
     return {"ok": True, "message": f"✅ Workout for {target_date} updated."}
+
+
+# ── Finance ───────────────────────────────────────────────────────────────────
+
+class BotFinanceTransaction(BaseModel):
+    telegram_id: int
+    amount: float
+    transaction_type: str = "expense"
+    category: str = "other"
+    currency: str = "SGD"
+    description: Optional[str] = None
+    transaction_date: Optional[str] = None
+
+
+@router.post("/finance/transaction", dependencies=[Depends(_bot_auth)])
+async def bot_create_finance_transaction(body: BotFinanceTransaction, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    data = body.model_dump(exclude={"telegram_id"})
+    result = await _handle_create_finance_transaction(data, user, db)
+    asyncio.create_task(refresh_profile_summary(user.id))
+    return result["data"] | {"response": result["response"]}
+
+
+class BotDeleteFinanceTransaction(BaseModel):
+    telegram_id: int
+    transaction_id: int
+
+
+@router.delete("/finance/transaction", dependencies=[Depends(_bot_auth)])
+async def bot_delete_finance_transaction(body: BotDeleteFinanceTransaction, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    result = await _handle_delete_finance_transaction({"transaction_id": body.transaction_id}, user, db)
+    asyncio.create_task(refresh_profile_summary(user.id))
+    return result
+
+
+@router.get("/finance/summary", dependencies=[Depends(_bot_auth)])
+async def bot_finance_summary(telegram_id: int, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(telegram_id, db)
+    from datetime import date as _date
+    from collections import defaultdict as _dd
+    today = _date.today()
+    month_start = today.replace(day=1)
+    txs = (await db.execute(
+        select(Transaction)
+        .where(Transaction.user_id == user.id, Transaction.transaction_date >= month_start)
+        .order_by(Transaction.transaction_date.desc())
+    )).scalars().all()
+
+    income: dict[str, float] = _dd(float)
+    expense: dict[str, float] = _dd(float)
+    for t in txs:
+        if t.transaction_type == "income":
+            income[t.currency] += t.amount
+        elif t.transaction_type == "expense":
+            expense[t.currency] += t.amount
+
+    all_curs = sorted(set(income) | set(expense))
+    lines = [f"💰 *Finance — {today.strftime('%B %Y')}*"]
+    for cur in all_curs:
+        net = income.get(cur, 0) - expense.get(cur, 0)
+        lines.append(f"{cur}: +{income.get(cur, 0):.0f} in / -{expense.get(cur, 0):.0f} out / net {net:+.0f}")
+    if not txs:
+        lines.append("No transactions this month yet.")
+    lines.append(f"\n{len(txs)} transaction(s) recorded.")
+
+    goals_result = await _handle_read_finance_goals(user, db)
+    return {"message": "\n".join(lines) + "\n\n" + goals_result["response"]}
+
+
+@router.get("/finance/goals", dependencies=[Depends(_bot_auth)])
+async def bot_finance_goals(telegram_id: int, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(telegram_id, db)
+    result = await _handle_read_finance_goals(user, db)
+    return {"message": result["response"]}
+
+
+class BotFinanceGoalCreate(BaseModel):
+    telegram_id: int
+    title: str
+    goal_type: str = "saving_target"
+    term: str = "mid"
+    target_amount: float
+    currency: str = "SGD"
+    deadline: Optional[str] = None
+
+
+@router.post("/finance/goal", dependencies=[Depends(_bot_auth)])
+async def bot_create_finance_goal(body: BotFinanceGoalCreate, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    data = body.model_dump(exclude={"telegram_id"})
+    result = await _handle_create_finance_goal(data, user, db)
+    asyncio.create_task(refresh_profile_summary(user.id))
+    return result["data"] | {"response": result["response"]}
+
+
+class BotFinanceGoalUpdate(BaseModel):
+    telegram_id: int
+    goal_id_or_title: str
+    target_amount: Optional[float] = None
+    manual_current: Optional[float] = None
+    deadline: Optional[str] = None
+    status: Optional[str] = None
+    title: Optional[str] = None
+
+
+@router.patch("/finance/goal", dependencies=[Depends(_bot_auth)])
+async def bot_update_finance_goal(body: BotFinanceGoalUpdate, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    data = body.model_dump(exclude={"telegram_id"}, exclude_none=True)
+    result = await _handle_update_finance_goal(data, user, db)
+    asyncio.create_task(refresh_profile_summary(user.id))
+    return result
+
+
+class BotDeleteFinanceGoal(BaseModel):
+    telegram_id: int
+    goal_id_or_title: str
+
+
+@router.delete("/finance/goal", dependencies=[Depends(_bot_auth)])
+async def bot_delete_finance_goal(body: BotDeleteFinanceGoal, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    result = await _handle_delete_finance_goal({"goal_id_or_title": body.goal_id_or_title}, user, db)
+    asyncio.create_task(refresh_profile_summary(user.id))
+    return result
 
 
 # ── Media (stub — expanded per domain as features are added) ──────────────────

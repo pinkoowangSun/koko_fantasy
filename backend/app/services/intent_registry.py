@@ -39,6 +39,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 DOMAIN_CONFIGS: dict[str, DomainConfig] = {
     "briefing": DomainConfig(scope_kw=None),
     "document": DomainConfig(scope_kw=None),
+    "finance":  DomainConfig(scope_kw="finance"),
     "journal":  DomainConfig(scope_kw="journals"),
     "memory":   DomainConfig(scope_kw=None),
     "task":     DomainConfig(scope_kw="tasks"),
@@ -97,6 +98,7 @@ a JSON object with exactly these fields:
 - memory   → persistent facts or preferences ("remember that I…", "I prefer…")
 - document → uploaded files, PDFs
 - briefing → daily summary (only valid with action=generate)
+- finance  → money transactions (income/expenses), financial goals, budgets, savings, spending analysis
 - ""       → empty string when action is "chat"
 
 ━━━ context_scope RULES ━━━
@@ -106,6 +108,7 @@ or anything that does not need activity data.
 - "tasks"    → user asks about workload, deadlines, overdue items, priorities
 - "workouts" → user asks about fitness, exercise history, progress, plans
 - "journals" → user asks about mood, diary entries, emotional patterns
+- "finance"  → user asks about spending, savings, financial goals, budget performance
 - "all"      → broad life-review question: "how have I been doing", \
 "what should I focus on", "give me insights", "how's my week going", etc.
 Multiple values allowed: ["tasks", "workouts"] if the question spans both domains.
@@ -139,6 +142,28 @@ update + workout:  log_date (ISO date of the session to edit; omit entirely if t
 create + memory:   key, value, category (preference/fact/note, default general)
 delete + memory:   key (the memory key to remove)
 
+create + finance (TRANSACTION — when user mentions spending/receiving money without saying "goal"):
+  record_type="transaction" (required, always set this),
+  amount (required, positive float), transaction_type (income/expense/transfer),
+  category (food/grocery/transport/housing/utilities/entertainment/health/education/gift/shopping/travel/salary/freelance/investment/other),
+  currency (3-letter code; default SGD if not mentioned),
+  description (brief description or null),
+  transaction_date (ISO date; today if not mentioned)
+create + finance (GOAL — when user says "set a goal", "save X by Y", "budget X per month", "spending limit"):
+  record_type="goal" (required, always set this),
+  title (short goal name), goal_type (spending_limit/saving_target/income_target/custom),
+  term (short/mid/long), target_amount (positive float), currency, deadline (ISO date or null)
+update + finance:
+  record_type ("transaction" or "goal"), goal_id_or_title (which goal to update; omit for transactions),
+  transaction_id (which transaction to update; omit for goals),
+  plus any of: target_amount, manual_current, deadline, status, title, amount, category, description
+delete + finance:
+  record_type ("transaction" or "goal"),
+  transaction_id (for transactions), goal_id_or_title (for goals — title substring is fine)
+list   + finance:  start_date, end_date, category, transaction_type, currency (all optional)
+read   + finance:  goal_id, period (e.g. "this month", "last 30 days")
+generate + finance: period, currency (for insights)
+
 list     + task:      no fields needed
 read     + journal:   entry_date (ISO date; omit for most recent entry)
 read     + workout:   no fields needed (returns today's plan)
@@ -147,6 +172,14 @@ generate + briefing:  no fields needed
 search   + document:  query (search term)
 query    + document:  question (user's natural-language question about their docs)
 chat:                 no data fields
+
+━━━ FINANCE TRIGGERS ━━━
+Use create+finance (record_type=transaction) when user mentions: spent, paid, bought, cost, received, earned, salary, income, got paid, charged, fee, bill, subscribed.
+Use create+finance (record_type=goal) when user mentions: save X, saving goal, spending limit, budget, reach X by Y, set a goal to.
+Use list+finance when user asks to see transactions, spending history, expenses.
+Use generate+finance when user asks for financial insights, analysis, how am I spending, finance summary.
+Use chat+context_scope=["finance"] for conversational finance questions: "how am I doing financially?", "am I on track with my savings?".
+Always include record_type in the data field for create/delete+finance so the system can route correctly.
 
 ━━━ WORKOUT TRIGGERS ━━━
 Use create+workout when the user describes any physical activity \

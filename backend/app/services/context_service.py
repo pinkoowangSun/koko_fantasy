@@ -13,6 +13,7 @@ from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
+from app.models.finance import FinanceGoal, Transaction
 from app.models.journal import JournalEntry
 from app.models.memory import MemoryItem
 from app.models.reminder import Reminder
@@ -232,6 +233,70 @@ async def _fetch_reminder_context(user_id: int, db: AsyncSession) -> str:
     return "\n".join(lines)
 
 
+# ── Finance context ───────────────────────────────────────────────────────────
+
+async def _fetch_finance_context(user_id: int, db: AsyncSession) -> str:
+    today = date.today()
+    thirty_ago = today - timedelta(days=30)
+    month_start = today.replace(day=1)
+
+    txs = (await db.execute(
+        select(Transaction)
+        .where(Transaction.user_id == user_id, Transaction.transaction_date >= thirty_ago)
+        .order_by(Transaction.transaction_date.desc())
+    )).scalars().all()
+
+    goals = (await db.execute(
+        select(FinanceGoal)
+        .where(FinanceGoal.user_id == user_id, FinanceGoal.status == "active")
+    )).scalars().all()
+
+    sections: list[str] = []
+
+    if txs:
+        income_by_cur: dict[str, float] = defaultdict(float)
+        expense_by_cur: dict[str, float] = defaultdict(float)
+        month_income: dict[str, float] = defaultdict(float)
+        month_expense: dict[str, float] = defaultdict(float)
+        cat_totals: dict[str, float] = defaultdict(float)
+
+        for t in txs:
+            if t.transaction_type == "income":
+                income_by_cur[t.currency] += t.amount
+                if t.transaction_date >= month_start:
+                    month_income[t.currency] += t.amount
+            elif t.transaction_type == "expense":
+                expense_by_cur[t.currency] += t.amount
+                cat_totals[t.category] += t.amount
+                if t.transaction_date >= month_start:
+                    month_expense[t.currency] += t.amount
+
+        lines = [f"## Finance — Last 30 Days ({len(txs)} transactions)"]
+        all_curs = set(income_by_cur) | set(expense_by_cur)
+        for cur in sorted(all_curs):
+            net = round(income_by_cur.get(cur, 0) - expense_by_cur.get(cur, 0), 2)
+            lines.append(
+                f"{cur}: income {income_by_cur.get(cur, 0):.0f}, "
+                f"expenses {expense_by_cur.get(cur, 0):.0f}, net {net:+.0f}"
+            )
+
+        if cat_totals:
+            top_cats = sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)[:4]
+            lines.append("Top spending: " + ", ".join(f"{c} ({v:.0f})" for c, v in top_cats))
+        sections.append("\n".join(lines))
+    else:
+        sections.append("## Finance\nNo transactions recorded in the past 30 days.")
+
+    if goals:
+        lines = [f"## Finance Goals ({len(goals)} active)"]
+        for g in goals:
+            deadline_str = f" — deadline {g.deadline}" if g.deadline else ""
+            lines.append(f"- {g.title}: {g.goal_type} {g.target_amount:.0f} {g.currency}{deadline_str}")
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)
+
+
 # ── Public builder ────────────────────────────────────────────────────────────
 
 async def build_rich_context(user_id: int, db: AsyncSession, scope: list[str]) -> str:
@@ -247,6 +312,8 @@ async def build_rich_context(user_id: int, db: AsyncSession, scope: list[str]) -
         tasks.append(_fetch_journal_context(user_id, db))
     if fetch_all or "reminders" in scope:
         tasks.append(_fetch_reminder_context(user_id, db))
+    if fetch_all or "finance" in scope:
+        tasks.append(_fetch_finance_context(user_id, db))
 
     if not tasks:
         return ""
@@ -295,6 +362,17 @@ async def _build_profile_summary(user_id: int, db: AsyncSession) -> str:
         .order_by(JournalEntry.entry_date.desc())
     )).scalars().all()
 
+    # Finance
+    finance_txs = (await db.execute(
+        select(Transaction)
+        .where(Transaction.user_id == user_id, Transaction.transaction_date >= today.replace(day=1))
+    )).scalars().all()
+
+    finance_goals = (await db.execute(
+        select(FinanceGoal)
+        .where(FinanceGoal.user_id == user_id, FinanceGoal.status == "active")
+    )).scalars().all()
+
     # Memory
     memory_items = (await db.execute(
         select(MemoryItem)
@@ -339,6 +417,30 @@ async def _build_profile_summary(user_id: int, db: AsyncSession) -> str:
         )
     else:
         lines.append("Journal: no entries this week.")
+
+    # Finance line
+    if finance_txs:
+        fin_income: dict[str, float] = defaultdict(float)
+        fin_expense: dict[str, float] = defaultdict(float)
+        for t in finance_txs:
+            if t.transaction_type == "income":
+                fin_income[t.currency] += t.amount
+            elif t.transaction_type == "expense":
+                fin_expense[t.currency] += t.amount
+        net_parts = []
+        for cur in sorted(set(fin_income) | set(fin_expense)):
+            net = fin_income.get(cur, 0) - fin_expense.get(cur, 0)
+            net_parts.append(f"net {net:+.0f} {cur}")
+        goal_parts = []
+        for g in finance_goals[:2]:
+            goal_parts.append(f"{g.title} ({g.goal_type})")
+        fin_line = "Finance: this month " + ", ".join(net_parts)
+        if goal_parts:
+            fin_line += ". Goals: " + "; ".join(goal_parts)
+        lines.append(fin_line + ".")
+    elif finance_goals:
+        goal_parts = [f"{g.title} ({g.goal_type})" for g in finance_goals[:2]]
+        lines.append(f"Finance: {len(finance_goals)} active goal(s): {'; '.join(goal_parts)}. No transactions this month.")
 
     # Memory line
     if memory_items:

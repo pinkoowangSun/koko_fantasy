@@ -38,6 +38,7 @@
       <a href="/dashboard" class="nav-link active"><span class="nav-icon">📅</span><span class="nav-label">Daily Tracker</span></a>
       <a href="/tasks"     class="nav-link"><span class="nav-icon">✅</span><span class="nav-label">Tasks</span></a>
       <a href="/workout"   class="nav-link"><span class="nav-icon">🏋️</span><span class="nav-label">Workout</span></a>
+      <a href="/finance"   class="nav-link"><span class="nav-icon">💰</span><span class="nav-label">Finance</span></a>
       <a href="/documents" class="nav-link"><span class="nav-icon">📄</span><span class="nav-label">Documents</span></a>
       <a href="/profile"   class="nav-link"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></a>
     </nav>
@@ -108,6 +109,25 @@
                   :style="'background:' + priorityColor(t.priority)"></span>
           </div>
         </template>
+      </div>
+    </template>
+
+    <!-- Finance daily tracker -->
+    <template x-if="financeDaily && (Object.keys(financeDaily.income_by_currency).length || Object.keys(financeDaily.expense_by_currency).length)">
+      <div class="card" style="margin-bottom:20px;cursor:pointer" @click="window.location.href='/finance'">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px">Today's Money Flow</span>
+          <span style="font-size:12px;color:#ABAAA5">→ Finance</span>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <template x-for="(val, cur) in financeDaily.income_by_currency" :key="'in'+cur">
+            <span style="font-size:14px;font-weight:600;color:#16a34a" x-text="'+' + Number(val).toLocaleString() + ' ' + cur"></span>
+          </template>
+          <template x-for="(val, cur) in financeDaily.expense_by_currency" :key="'ex'+cur">
+            <span style="font-size:14px;font-weight:600;color:#dc2626" x-text="'-' + Number(val).toLocaleString() + ' ' + cur"></span>
+          </template>
+        </div>
+        <div x-show="financeDaily.transactions.length > 0" style="margin-top:8px;font-size:12px;color:#ABAAA5" x-text="financeDaily.transactions.length + ' transaction' + (financeDaily.transactions.length === 1 ? '' : 's') + ' today'"></div>
       </div>
     </template>
 
@@ -464,6 +484,7 @@
       briefing: null,
       dayModal: null,
       todaySummary: null,
+      financeDaily: null,
       calendarObj: null,
       username: '',
       addEntry: {
@@ -496,6 +517,9 @@
         try {
           this.todaySummary = await API.get('/calendar/today');
         } catch(e) { console.error(e); }
+        try {
+          this.financeDaily = await API.get('/finance/daily');
+        } catch {}
       },
 
       initCalendar() {

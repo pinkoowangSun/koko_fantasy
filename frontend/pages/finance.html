@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Koko — Finance</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .tab-bar { display:flex; gap:4px; background:#F0EFE9; border-radius:10px; padding:3px; margin-bottom:24px; width:fit-content; flex-wrap:wrap; }
+    .tab-btn { padding:6px 20px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:none; background:transparent; color:#78776E; transition:all .12s; font-family:inherit; }
+    .tab-btn.active { background:#fff; color:#1A1917; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+
+    /* Stat cards */
+    .stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+    @media(max-width:700px) { .stat-grid { grid-template-columns:1fr 1fr; } }
+    .stat-card { background:#fff; border:1px solid #E8E7E3; border-radius:12px; padding:16px 18px; }
+    .stat-label { font-size:11px; font-weight:600; color:#ABAAA5; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+    .stat-val { font-size:22px; font-weight:600; color:#1A1917; line-height:1.2; }
+    .stat-val.income { color:#16a34a; }
+    .stat-val.expense { color:#dc2626; }
+    .stat-val.net-pos { color:#16a34a; }
+    .stat-val.net-neg { color:#dc2626; }
+    .stat-sub { font-size:11.5px; color:#ABAAA5; margin-top:4px; }
+
+    /* Goal cards */
+    .goal-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+    @media(max-width:700px) { .goal-grid { grid-template-columns:1fr; } }
+    .goal-card { background:#fff; border:1px solid #E8E7E3; border-radius:12px; padding:16px 18px; position:relative; }
+    .goal-status { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:3px 10px; border-radius:999px; margin-bottom:10px; }
+    .status-on_track { background:#DCFCE7; color:#15803D; }
+    .status-beyond   { background:#EDE9FE; color:#6D28D9; }
+    .status-at_risk  { background:#FEE2E2; color:#DC2626; }
+
+    .progress-bar-bg { background:#F0EFE9; border-radius:999px; height:7px; margin:8px 0 5px; overflow:hidden; }
+    .progress-bar-fill { height:100%; border-radius:999px; transition:width .4s; }
+    .fill-on_track { background:#22c55e; }
+    .fill-beyond   { background:#8B5CF6; }
+    .fill-at_risk  { background:#ef4444; }
+
+    /* Transaction list */
+    .tx-row { display:flex; align-items:center; gap:12px; padding:11px 14px; border-bottom:1px solid #F0EFEC; }
+    .tx-row:last-child { border-bottom:none; }
+    .tx-cat-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .tx-amount { font-size:14px; font-weight:600; margin-left:auto; white-space:nowrap; }
+    .tx-amount.income  { color:#16a34a; }
+    .tx-amount.expense { color:#dc2626; }
+    .tx-amount.transfer{ color:#78776E; }
+
+    /* Asset cards */
+    .asset-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+    @media(max-width:700px) { .asset-grid { grid-template-columns:1fr; } }
+    .asset-card { background:#fff; border:1px solid #E8E7E3; border-radius:12px; padding:14px 16px; }
+    .asset-amount { font-size:18px; font-weight:600; color:#1A1917; }
+    .asset-amount.masked { color:#ABAAA5; letter-spacing:4px; }
+
+    /* Encryption notice */
+    .enc-banner { background:#FEF9C3; border:1px solid #FDE68A; border-radius:10px; padding:10px 14px; font-size:12.5px; color:#92400E; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+
+    /* Filter bar */
+    .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+    .filter-pill { padding:5px 14px; border-radius:999px; border:1px solid #E8E7E3; font-size:12.5px; font-weight:500; cursor:pointer; background:#fff; color:#78776E; font-family:inherit; transition:all .1s; }
+    .filter-pill.active { background:#1A1917; color:#fff; border-color:#1A1917; }
+    .filter-select { padding:5px 10px; border-radius:999px; border:1px solid #E8E7E3; font-size:12.5px; font-family:inherit; background:#fff; color:#78776E; cursor:pointer; }
+
+    /* Chart containers */
+    .chart-row { display:grid; grid-template-columns:3fr 2fr; gap:16px; margin-bottom:20px; }
+    @media(max-width:750px) { .chart-row { grid-template-columns:1fr; } }
+    .chart-box { background:#fff; border:1px solid #E8E7E3; border-radius:12px; padding:16px; }
+    .chart-title { font-size:12px; font-weight:600; color:#78776E; margin-bottom:12px; }
+
+    /* Insights panel */
+    .insights-panel { background:#F6F5F2; border-radius:12px; padding:16px 18px; margin-top:20px; }
+    .insight-section { margin-bottom:12px; }
+    .insight-section:last-child { margin-bottom:0; }
+    .insight-heading { font-size:11.5px; font-weight:600; color:#ABAAA5; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+    .insight-text { font-size:13px; color:#1A1917; line-height:1.6; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(26,25,23,.45); z-index:100; display:flex; align-items:center; justify-content:center; padding:16px; }
+    .modal-box { background:#fff; border-radius:16px; padding:24px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; }
+    .modal-title { font-size:16px; font-weight:600; margin-bottom:20px; }
+    .form-group { margin-bottom:14px; }
+    .form-label { font-size:12px; font-weight:600; color:#78776E; display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.3px; }
+    .form-input { width:100%; padding:9px 12px; border:1px solid #E8E7E3; border-radius:8px; font-size:13.5px; font-family:inherit; box-sizing:border-box; }
+    .form-input:focus { outline:none; border-color:#1A1917; }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .type-toggle { display:flex; gap:6px; }
+    .type-btn { flex:1; padding:8px; border-radius:8px; border:1px solid #E8E7E3; font-size:13px; font-weight:500; cursor:pointer; background:#fff; font-family:inherit; transition:all .1s; }
+    .type-btn.income-active  { background:#DCFCE7; border-color:#22c55e; color:#15803D; }
+    .type-btn.expense-active { background:#FEE2E2; border-color:#ef4444; color:#DC2626; }
+    .type-btn.transfer-active{ background:#EDE9FE; border-color:#8B5CF6; color:#6D28D9; }
+
+    .icon-btn { background:none; border:none; cursor:pointer; padding:4px 6px; border-radius:6px; line-height:1; color:#ABAAA5; transition:background .1s,color .1s; }
+    .icon-btn:hover { background:#F0EFE9; color:#1A1917; }
+    .icon-btn.danger:hover { background:#FEE2E2; color:#DC2626; }
+
+    .reveal-toggle { font-size:12px; color:#78776E; cursor:pointer; text-decoration:underline; padding:2px 6px; background:none; border:none; font-family:inherit; }
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid #E8E7E3; border-top-color:#1A1917; border-radius:50%; animation:spin .6s linear infinite; vertical-align:middle; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .section-label { font-size:11px; font-weight:600; color:#ABAAA5; text-transform:uppercase; letter-spacing:.5px; }
+    .empty-state { text-align:center; padding:40px 20px; color:#ABAAA5; font-size:13.5px; }
+  </style>
+</head>
+<body x-data="financeApp()" x-init="init()">
+
+<div class="page-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="sidebar-logo-mark">✦</span>
+      <span class="sidebar-logo-text" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></span>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="/dashboard" class="nav-link"><span class="nav-icon">📅</span><span class="nav-label">Daily Tracker</span></a>
+      <a href="/tasks"     class="nav-link"><span class="nav-icon">✅</span><span class="nav-label">Tasks</span></a>
+      <a href="/workout"   class="nav-link"><span class="nav-icon">🏋️</span><span class="nav-label">Workout</span></a>
+      <a href="/finance"   class="nav-link active"><span class="nav-icon">💰</span><span class="nav-label">Finance</span></a>
+      <a href="/documents" class="nav-link"><span class="nav-icon">📄</span><span class="nav-label">Documents</span></a>
+      <a href="/profile"   class="nav-link"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></a>
+    </nav>
+    <div style="flex:1"></div>
+    <button @click="logout()" class="nav-link danger"><span class="nav-icon">←</span><span class="nav-label">Sign out</span></button>
+  </aside>
+
+  <!-- Main -->
+  <main class="page-main">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Finance</h1>
+        <p style="font-size:13px;color:#78776E;margin-top:2px">Build financial health, reach your goals — your data is encrypted and yours alone.</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button @click="openAddTransaction()" class="btn btn-secondary">+ Transaction</button>
+        <button @click="activeTab='goals';openAddGoal()" class="btn btn-primary">+ Goal</button>
+      </div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn" :class="{active: activeTab==='overview'}" @click="activeTab='overview'">Overview</button>
+      <button class="tab-btn" :class="{active: activeTab==='transactions'}" @click="activeTab='transactions';loadTransactions()">Transactions</button>
+      <button class="tab-btn" :class="{active: activeTab==='goals'}" @click="activeTab='goals'">Goals</button>
+      <button class="tab-btn" :class="{active: activeTab==='assets'}" @click="activeTab='assets'">Assets</button>
+    </div>
+
+    <!-- ── TAB: OVERVIEW ───────────────────────────────────────────────────── -->
+    <div x-show="activeTab==='overview'">
+
+      <!-- Month stats -->
+      <p class="section-label" style="margin-bottom:10px">This Month</p>
+      <div class="stat-grid" style="margin-bottom:24px">
+        <template x-for="(val, cur) in summary.income_by_currency" :key="'in-'+cur">
+          <div class="stat-card">
+            <div class="stat-label">Income · <span x-text="cur"></span></div>
+            <div class="stat-val income" x-text="fmt(val)"></div>
+            <div class="stat-sub">total in</div>
+          </div>
+        </template>
+        <template x-for="(val, cur) in summary.expense_by_currency" :key="'ex-'+cur">
+          <div class="stat-card">
+            <div class="stat-label">Expenses · <span x-text="cur"></span></div>
+            <div class="stat-val expense" x-text="fmt(val)"></div>
+            <div class="stat-sub">total out</div>
+          </div>
+        </template>
+        <template x-for="(val, cur) in summary.net_by_currency" :key="'net-'+cur">
+          <div class="stat-card">
+            <div class="stat-label">Net · <span x-text="cur"></span></div>
+            <div class="stat-val" :class="val >= 0 ? 'net-pos' : 'net-neg'" x-text="(val >= 0 ? '+' : '') + fmt(val)"></div>
+            <div class="stat-sub">saved this month</div>
+          </div>
+        </template>
+        <template x-if="Object.keys(summary.net_by_currency).length === 0">
+          <div class="stat-card" style="grid-column:1/-1">
+            <div class="stat-label">This Month</div>
+            <div class="stat-val" style="color:#ABAAA5">No data</div>
+            <div class="stat-sub">Add a transaction to get started</div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Goals overview -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <p class="section-label">Active Goals</p>
+        <button @click="activeTab='goals'" style="font-size:12px;color:#78776E;background:none;border:none;cursor:pointer;text-decoration:underline">See all</button>
+      </div>
+
+      <div x-show="goals.length === 0" class="empty-state">
+        No goals yet. <button @click="openAddGoal()" class="btn btn-primary btn-sm" style="margin-left:8px">+ Add Goal</button>
+      </div>
+
+      <div class="goal-grid">
+        <template x-for="g in goals.filter(g=>g.status==='active').slice(0,4)" :key="g.id">
+          <div class="goal-card">
+            <div class="goal-status" :class="'status-'+g.status_label">
+              <span x-text="statusIcon(g.status_label)"></span>
+              <span x-text="statusText(g.status_label)"></span>
+            </div>
+            <div style="font-size:14px;font-weight:600;color:#1A1917;margin-bottom:4px" x-text="g.title"></div>
+            <div style="font-size:12px;color:#ABAAA5" x-text="goalTypeLabel(g.goal_type) + ' · ' + g.currency"></div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" :class="'fill-'+g.status_label" :style="'width:'+Math.min(g.progress_pct,100)+'%'"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#78776E">
+              <span x-text="fmt(g.current_amount) + ' / ' + fmt(g.target_amount) + ' ' + g.currency"></span>
+              <span x-text="g.progress_pct.toFixed(0) + '%'"></span>
+            </div>
+            <div x-show="g.projected_end" style="font-size:11.5px;color:#ABAAA5;margin-top:5px">
+              ETA: <span x-text="g.projected_end"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Asset totals -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 12px">
+        <p class="section-label">Total Assets</p>
+        <button @click="toggleRevealAll()" class="reveal-toggle" x-text="revealAssets ? '🙈 Hide amounts' : '👁 Reveal amounts'"></button>
+      </div>
+      <template x-if="assets.length === 0">
+        <div class="empty-state">No assets yet. <button @click="activeTab='assets';openAddAsset()" class="btn btn-secondary btn-sm" style="margin-left:8px">+ Add Asset</button></div>
+      </template>
+      <template x-if="assets.length > 0">
+        <div>
+          <template x-for="(total, cur) in assetTotalsByCurrency()" :key="'asset-'+cur">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #F0EFEC">
+              <span style="font-size:14px;font-weight:600;color:#1A1917" x-text="cur"></span>
+              <span style="font-size:18px;font-weight:600" :style="revealAssets ? '' : 'letter-spacing:4px;color:#ABAAA5'" x-text="revealAssets ? fmt(total) : '••••••'"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- ── TAB: TRANSACTIONS ───────────────────────────────────────────────── -->
+    <div x-show="activeTab==='transactions'">
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <button class="filter-pill" :class="{active: txFilter.type===''}" @click="txFilter.type='';loadTransactions()">All</button>
+        <button class="filter-pill" :class="{active: txFilter.type==='income'}" @click="txFilter.type='income';loadTransactions()">Income</button>
+        <button class="filter-pill" :class="{active: txFilter.type==='expense'}" @click="txFilter.type='expense';loadTransactions()">Expenses</button>
+        <select class="filter-select" x-model="txFilter.category" @change="loadTransactions()">
+          <option value="">All categories</option>
+          <template x-for="cat in categories" :key="cat">
+            <option :value="cat" x-text="catLabel(cat)"></option>
+          </template>
+        </select>
+        <input type="date" class="filter-select" x-model="txFilter.start_date" @change="loadTransactions()" placeholder="From" />
+        <input type="date" class="filter-select" x-model="txFilter.end_date" @change="loadTransactions()" placeholder="To" />
+      </div>
+
+      <!-- Charts -->
+      <div class="chart-row" x-show="transactions.length > 0">
+        <div class="chart-box">
+          <div class="chart-title">Monthly Income vs Expenses</div>
+          <canvas id="barChart" height="140"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Spending by Category</div>
+          <canvas id="pieChart" height="140"></canvas>
+        </div>
+      </div>
+
+      <!-- AI Insights -->
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button class="btn btn-secondary" @click="loadInsights()" :disabled="loadingInsights">
+          <span x-show="loadingInsights" class="spinner" style="margin-right:6px"></span>
+          ✨ AI Insights
+        </button>
+      </div>
+
+      <template x-if="insights">
+        <div class="insights-panel">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <span style="font-size:14px;font-weight:600">Finance Insights</span>
+            <button @click="insights=null" class="icon-btn">✕</button>
+          </div>
+          <div class="insight-section">
+            <div class="insight-heading">Summary</div>
+            <div class="insight-text" x-text="insights.summary"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="insight-section">
+              <div class="insight-heading">📈 Income</div>
+              <div class="insight-text" x-text="insights.income_trend"></div>
+            </div>
+            <div class="insight-section">
+              <div class="insight-heading">📉 Expenses</div>
+              <div class="insight-text" x-text="insights.expense_trend"></div>
+            </div>
+          </div>
+          <div class="insight-section" style="margin-top:12px">
+            <div class="insight-heading">🎯 Goals</div>
+            <div class="insight-text" x-text="insights.goal_status_note"></div>
+          </div>
+          <template x-if="insights.advice && insights.advice.length">
+            <div class="insight-section" style="margin-top:12px">
+              <div class="insight-heading">💡 Advice</div>
+              <ul style="margin:4px 0 0;padding-left:18px;font-size:13px;color:#1A1917;line-height:1.7">
+                <template x-for="a in insights.advice" :key="a">
+                  <li x-text="a"></li>
+                </template>
+              </ul>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Transaction list -->
+      <div x-show="loadingTx" class="empty-state"><span class="spinner"></span></div>
+      <div x-show="!loadingTx && transactions.length === 0" class="empty-state">
+        No transactions found. <button @click="openAddTransaction()" class="btn btn-primary btn-sm" style="margin-left:8px">+ Add</button>
+      </div>
+      <div x-show="!loadingTx && transactions.length > 0" class="card" style="padding:0;overflow:hidden">
+        <template x-for="tx in transactions" :key="tx.id">
+          <div class="tx-row">
+            <div class="tx-cat-dot" :style="'background:'+catColor(tx.category)"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:500;color:#1A1917" x-text="tx.description || catLabel(tx.category)"></div>
+              <div style="font-size:11.5px;color:#ABAAA5" x-text="tx.transaction_date + ' · ' + catLabel(tx.category)"></div>
+            </div>
+            <div class="tx-amount" :class="tx.transaction_type" x-text="(tx.transaction_type==='income' ? '+' : tx.transaction_type==='expense' ? '-' : '') + fmt(tx.amount) + ' ' + tx.currency"></div>
+            <button class="icon-btn danger" @click="deleteTransaction(tx.id)">🗑</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── TAB: GOALS ─────────────────────────────────────────────────────── -->
+    <div x-show="activeTab==='goals'">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button @click="openAddGoal()" class="btn btn-primary">+ New Goal</button>
+      </div>
+
+      <div x-show="goals.length === 0" class="empty-state">
+        No financial goals yet.<br>Set a savings target or spending limit to get started.
+      </div>
+
+      <div class="goal-grid">
+        <template x-for="g in goals" :key="g.id">
+          <div class="goal-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+              <div class="goal-status" :class="'status-'+g.status_label">
+                <span x-text="statusIcon(g.status_label)"></span>
+                <span x-text="statusText(g.status_label)"></span>
+              </div>
+              <div style="display:flex;gap:2px">
+                <button class="icon-btn" @click="openEditGoal(g)">✏️</button>
+                <button class="icon-btn danger" @click="deleteGoal(g.id)">🗑</button>
+              </div>
+            </div>
+            <div style="font-size:15px;font-weight:600;color:#1A1917;margin-bottom:3px" x-text="g.title"></div>
+            <div style="font-size:12px;color:#ABAAA5;margin-bottom:10px" x-text="goalTypeLabel(g.goal_type) + ' · ' + (g.deadline ? 'Due ' + g.deadline : 'No deadline')"></div>
+
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" :class="'fill-'+g.status_label" :style="'width:'+Math.min(g.progress_pct,100)+'%'"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#78776E;margin-top:4px">
+              <span x-text="fmt(g.current_amount) + ' ' + g.currency"></span>
+              <span x-text="'Target: ' + fmt(g.target_amount) + ' ' + g.currency"></span>
+            </div>
+
+            <div x-show="g.projected_end" style="font-size:12px;color:#ABAAA5;margin-top:8px;padding-top:8px;border-top:1px solid #F0EFEC">
+              📅 Projected finish: <span style="font-weight:500;color:#78776E" x-text="g.projected_end"></span>
+            </div>
+
+            <!-- Manual override -->
+            <div style="margin-top:12px;display:flex;gap:6px;align-items:center">
+              <input type="number" class="form-input" style="height:32px;font-size:12.5px;padding:6px 10px"
+                     :placeholder="'Current amount (' + g.currency + ')'"
+                     x-model.number="g._manualInput" />
+              <button class="btn btn-secondary btn-sm" @click="setManualCurrent(g)" style="white-space:nowrap;flex-shrink:0">Update</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── TAB: ASSETS ────────────────────────────────────────────────────── -->
+    <div x-show="activeTab==='assets'">
+      <div class="enc-banner">
+        🔒 Asset amounts are encrypted at rest. Only you can see them.
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <button @click="revealAssets=!revealAssets" class="reveal-toggle" x-text="revealAssets ? '🙈 Hide amounts' : '👁 Reveal amounts'"></button>
+        <button @click="openAddAsset()" class="btn btn-primary">+ Add Asset</button>
+      </div>
+
+      <div x-show="assets.length === 0" class="empty-state">No assets yet. Add your bank accounts, investments, or properties.</div>
+
+      <!-- Group by type -->
+      <template x-for="assetType in assetTypes" :key="assetType">
+        <template x-if="assets.filter(a=>a.asset_type===assetType).length > 0">
+          <div style="margin-bottom:20px">
+            <p class="section-label" style="margin-bottom:8px" x-text="assetTypeLabel(assetType)"></p>
+            <div class="asset-grid">
+              <template x-for="a in assets.filter(a=>a.asset_type===assetType)" :key="a.id">
+                <div class="asset-card">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div>
+                      <div style="font-size:14px;font-weight:600;color:#1A1917;margin-bottom:2px" x-text="a.name"></div>
+                      <div style="font-size:12px;color:#ABAAA5" x-text="(a.institution ? a.institution + ' · ' : '') + a.currency"></div>
+                    </div>
+                    <div style="display:flex;gap:2px">
+                      <button class="icon-btn" @click="openEditAsset(a)">✏️</button>
+                      <button class="icon-btn danger" @click="deleteAsset(a.id)">🗑</button>
+                    </div>
+                  </div>
+                  <div class="asset-amount" :class="revealAssets ? '' : 'masked'" style="margin-top:10px"
+                       x-text="revealAssets ? fmt(a.amount) + ' ' + a.currency : '••••••'"></div>
+                  <div x-show="a.notes" style="font-size:12px;color:#ABAAA5;margin-top:5px" x-text="a.notes"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </template>
+
+      <!-- Totals by currency -->
+      <template x-if="assets.length > 0">
+        <div class="card" style="margin-top:8px">
+          <p class="section-label" style="margin-bottom:12px">Total by Currency</p>
+          <template x-for="(total, cur) in assetTotalsByCurrency()" :key="'tot-'+cur">
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F0EFEC">
+              <span style="font-size:13px;color:#78776E" x-text="cur"></span>
+              <span style="font-size:14px;font-weight:600;color:#1A1917" :style="revealAssets ? '' : 'letter-spacing:4px;color:#ABAAA5'" x-text="revealAssets ? fmt(total) : '••••••'"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── ADD / EDIT TRANSACTION MODAL ──────────────────────────────────────── -->
+<template x-if="showTxModal">
+  <div class="modal-overlay" @click.self="showTxModal=false">
+    <div class="modal-box">
+      <div class="modal-title" x-text="editingTx ? 'Edit Transaction' : 'Add Transaction'"></div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <div class="type-toggle">
+          <button class="type-btn" :class="txForm.transaction_type==='income' ? 'income-active' : ''" @click="txForm.transaction_type='income'">+ Income</button>
+          <button class="type-btn" :class="txForm.transaction_type==='expense' ? 'expense-active' : ''" @click="txForm.transaction_type='expense'">− Expense</button>
+          <button class="type-btn" :class="txForm.transaction_type==='transfer' ? 'transfer-active' : ''" @click="txForm.transaction_type='transfer'">↔ Transfer</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Amount</label>
+          <input type="number" class="form-input" x-model.number="txForm.amount" placeholder="0.00" min="0" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Currency</label>
+          <input type="text" class="form-input" x-model="txForm.currency" placeholder="SGD" maxlength="5" style="text-transform:uppercase" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-input" x-model="txForm.category">
+          <template x-for="cat in categories" :key="cat">
+            <option :value="cat" x-text="catLabel(cat)"></option>
+          </template>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input type="date" class="form-input" x-model="txForm.transaction_date" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description (optional)</label>
+        <input type="text" class="form-input" x-model="txForm.description" placeholder="e.g. Lunch with team" />
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button @click="showTxModal=false" class="btn btn-secondary">Cancel</button>
+        <button @click="saveTx()" class="btn btn-primary" :disabled="savingTx">
+          <span x-show="savingTx" class="spinner" style="margin-right:5px"></span>
+          <span x-text="editingTx ? 'Update' : 'Save'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ── ADD / EDIT GOAL MODAL ──────────────────────────────────────────────── -->
+<template x-if="showGoalModal">
+  <div class="modal-overlay" @click.self="showGoalModal=false">
+    <div class="modal-box">
+      <div class="modal-title" x-text="editingGoal ? 'Edit Goal' : 'New Financial Goal'"></div>
+      <div class="form-group">
+        <label class="form-label">Goal Title</label>
+        <input type="text" class="form-input" x-model="goalForm.title" placeholder="e.g. Save for house down payment" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Goal Type</label>
+          <select class="form-input" x-model="goalForm.goal_type">
+            <option value="saving_target">Saving Target</option>
+            <option value="spending_limit">Spending Limit</option>
+            <option value="income_target">Income Target</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Term</label>
+          <select class="form-input" x-model="goalForm.term">
+            <option value="short">Short (&lt;3 months)</option>
+            <option value="mid">Mid (3–12 months)</option>
+            <option value="long">Long (&gt;1 year)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Target Amount</label>
+          <input type="number" class="form-input" x-model.number="goalForm.target_amount" placeholder="0" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Currency</label>
+          <input type="text" class="form-input" x-model="goalForm.currency" placeholder="SGD" maxlength="5" style="text-transform:uppercase" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Deadline (optional)</label>
+        <input type="date" class="form-input" x-model="goalForm.deadline" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description (optional)</label>
+        <input type="text" class="form-input" x-model="goalForm.description" placeholder="Additional notes about this goal" />
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button @click="showGoalModal=false" class="btn btn-secondary">Cancel</button>
+        <button @click="saveGoal()" class="btn btn-primary" :disabled="savingGoal">
+          <span x-show="savingGoal" class="spinner" style="margin-right:5px"></span>
+          <span x-text="editingGoal ? 'Update' : 'Create Goal'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ── ADD / EDIT ASSET MODAL ─────────────────────────────────────────────── -->
+<template x-if="showAssetModal">
+  <div class="modal-overlay" @click.self="showAssetModal=false">
+    <div class="modal-box">
+      <div class="modal-title" x-text="editingAsset ? 'Edit Asset' : 'Add Asset'"></div>
+      <div class="enc-banner" style="margin-bottom:16px">🔒 The amount will be encrypted before storing.</div>
+      <div class="form-group">
+        <label class="form-label">Asset Name</label>
+        <input type="text" class="form-input" x-model="assetForm.name" placeholder="e.g. DBS Savings Account" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select class="form-input" x-model="assetForm.asset_type">
+            <option value="cash">Cash / Bank</option>
+            <option value="investment">Investment</option>
+            <option value="property">Property</option>
+            <option value="crypto">Crypto</option>
+            <option value="cpf">CPF</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Currency</label>
+          <input type="text" class="form-input" x-model="assetForm.currency" placeholder="SGD" maxlength="5" style="text-transform:uppercase" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Amount</label>
+        <input type="number" class="form-input" x-model.number="assetForm.amount" placeholder="0.00" min="0" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Institution (optional)</label>
+        <input type="text" class="form-input" x-model="assetForm.institution" placeholder="e.g. DBS, OCBC" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <input type="text" class="form-input" x-model="assetForm.notes" placeholder="Any additional notes" />
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button @click="showAssetModal=false" class="btn btn-secondary">Cancel</button>
+        <button @click="saveAsset()" class="btn btn-primary" :disabled="savingAsset">
+          <span x-show="savingAsset" class="spinner" style="margin-right:5px"></span>
+          <span x-text="editingAsset ? 'Update' : 'Save Asset'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script src="/static/js/app.js"></script>
+<script>
+// Chart instances
+let _barChart = null;
+let _pieChart = null;
+
+function financeApp() {
+  return {
+    username: '',
+    activeTab: 'overview',
+
+    // Data
+    transactions: [],
+    goals: [],
+    assets: [],
+    summary: { income_by_currency:{}, expense_by_currency:{}, net_by_currency:{}, by_category:{}, transaction_count:0 },
+    insights: null,
+
+    // UI state
+    loadingTx: false,
+    loadingInsights: false,
+    revealAssets: false,
+
+    // Modals
+    showTxModal: false, editingTx: null, savingTx: false,
+    showGoalModal: false, editingGoal: null, savingGoal: false,
+    showAssetModal: false, editingAsset: null, savingAsset: false,
+
+    // Filters
+    txFilter: { type:'', category:'', start_date:'', end_date:'' },
+
+    // Forms
+    txForm: { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10) },
+    goalForm: { title:'', goal_type:'saving_target', term:'mid', target_amount:0, currency:'SGD', deadline:'', description:'' },
+    assetForm: { name:'', asset_type:'cash', amount:0, currency:'SGD', institution:'', notes:'' },
+
+    categories: ['food','grocery','transport','housing','utilities','entertainment','health','education','gift','shopping','travel','salary','freelance','investment','other'],
+    assetTypes: ['cash','investment','property','crypto','cpf','other'],
+
+    async init() {
+      const token = localStorage.getItem('koko_token');
+      if (!token) { window.location.href = '/'; return; }
+      try {
+        const me = await API.get('/users/me');
+        this.username = me.username || me.telegram_id;
+      } catch { window.location.href = '/'; return; }
+
+      await Promise.all([this.loadGoals(), this.loadAssets(), this.loadMonthlySummary()]);
+    },
+
+    logout() { localStorage.removeItem('koko_token'); window.location.href = '/'; },
+
+    fmt(n) {
+      if (n == null) return '—';
+      return Number(n).toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:2 });
+    },
+
+    // ── Data loaders ──────────────────────────────────────────────────────
+
+    async loadMonthlySummary() {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+      const end = now.toISOString().slice(0,10);
+      try {
+        this.summary = await API.get(`/finance/summary?start_date=${start}&end_date=${end}`);
+      } catch {}
+    },
+
+    async loadTransactions() {
+      this.loadingTx = true;
+      try {
+        let url = '/finance/transactions?limit=100';
+        if (this.txFilter.type)       url += `&transaction_type=${this.txFilter.type}`;
+        if (this.txFilter.category)   url += `&category=${this.txFilter.category}`;
+        if (this.txFilter.start_date) url += `&start_date=${this.txFilter.start_date}`;
+        if (this.txFilter.end_date)   url += `&end_date=${this.txFilter.end_date}`;
+        this.transactions = await API.get(url);
+        this.$nextTick(() => { this.renderCharts(); });
+      } catch(e) { console.error(e); }
+      finally { this.loadingTx = false; }
+    },
+
+    async loadGoals() {
+      try { this.goals = await API.get('/finance/goals'); } catch {}
+    },
+
+    async loadAssets() {
+      try { this.assets = await API.get('/finance/assets'); } catch {}
+    },
+
+    async loadInsights() {
+      this.loadingInsights = true;
+      try { this.insights = await API.get('/finance/insights'); }
+      catch(e) { showToast('Failed to generate insights: ' + (e.message||e), 'error'); }
+      finally { this.loadingInsights = false; }
+    },
+
+    // ── Charts ────────────────────────────────────────────────────────────
+
+    renderCharts() {
+      this.renderBarChart();
+      this.renderPieChart();
+    },
+
+    renderBarChart() {
+      const ctx = document.getElementById('barChart');
+      if (!ctx) return;
+      if (_barChart) { _barChart.destroy(); _barChart = null; }
+
+      // Group by month
+      const monthly = {};
+      this.transactions.forEach(t => {
+        const m = t.transaction_date.slice(0,7);
+        if (!monthly[m]) monthly[m] = { income:0, expense:0 };
+        if (t.transaction_type === 'income') monthly[m].income += t.amount;
+        if (t.transaction_type === 'expense') monthly[m].expense += t.amount;
+      });
+      const labels = Object.keys(monthly).sort();
+      _barChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label:'Income', data: labels.map(l=>monthly[l].income), backgroundColor:'#22c55e' },
+            { label:'Expenses', data: labels.map(l=>monthly[l].expense), backgroundColor:'#ef4444' },
+          ]
+        },
+        options: { responsive:true, plugins:{ legend:{ position:'bottom', labels:{font:{family:'Inter',size:11}} } }, scales:{ x:{ticks:{font:{family:'Inter',size:11}}}, y:{ticks:{font:{family:'Inter',size:11}}} } }
+      });
+    },
+
+    renderPieChart() {
+      const ctx = document.getElementById('pieChart');
+      if (!ctx) return;
+      if (_pieChart) { _pieChart.destroy(); _pieChart = null; }
+
+      const catTotals = {};
+      this.transactions.filter(t=>t.transaction_type==='expense').forEach(t => {
+        catTotals[t.category] = (catTotals[t.category]||0) + t.amount;
+      });
+      const cats = Object.keys(catTotals);
+      if (!cats.length) return;
+      const palette = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#8B5CF6','#ec4899','#06b6d4','#84cc16','#f97316','#6b7280'];
+      _pieChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: cats.map(c=>this.catLabel(c)), datasets:[{ data:cats.map(c=>catTotals[c]), backgroundColor:cats.map((_,i)=>palette[i%palette.length]) }] },
+        options: { responsive:true, plugins:{ legend:{ position:'bottom', labels:{font:{family:'Inter',size:11}} } } }
+      });
+    },
+
+    // ── CRUD — Transactions ───────────────────────────────────────────────
+
+    openAddTransaction() {
+      this.editingTx = null;
+      this.txForm = { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10) };
+      this.showTxModal = true;
+    },
+
+    async saveTx() {
+      if (!this.txForm.amount || this.txForm.amount <= 0) { showToast('Please enter a valid amount', 'error'); return; }
+      this.savingTx = true;
+      try {
+        const payload = { ...this.txForm };
+        if (!payload.description) delete payload.description;
+        if (this.editingTx) {
+          await API.patch(`/finance/transactions/${this.editingTx.id}`, payload);
+          showToast('Transaction updated');
+        } else {
+          await API.post('/finance/transactions', payload);
+          showToast('Transaction saved');
+        }
+        this.showTxModal = false;
+        await Promise.all([this.loadTransactions(), this.loadMonthlySummary()]);
+      } catch(e) { showToast('Failed to save: ' + (e.message||e), 'error'); }
+      finally { this.savingTx = false; }
+    },
+
+    async deleteTransaction(id) {
+      if (!confirm('Delete this transaction?')) return;
+      try {
+        await API.delete(`/finance/transactions/${id}`);
+        this.transactions = this.transactions.filter(t=>t.id!==id);
+        showToast('Deleted');
+        await this.loadMonthlySummary();
+      } catch(e) { showToast('Failed to delete', 'error'); }
+    },
+
+    // ── CRUD — Goals ──────────────────────────────────────────────────────
+
+    openAddGoal() {
+      this.editingGoal = null;
+      this.goalForm = { title:'', goal_type:'saving_target', term:'mid', target_amount:0, currency:'SGD', deadline:'', description:'' };
+      this.showGoalModal = true;
+    },
+
+    openEditGoal(g) {
+      this.editingGoal = g;
+      this.goalForm = { title:g.title, goal_type:g.goal_type, term:g.term, target_amount:g.target_amount, currency:g.currency, deadline:g.deadline||'', description:g.description||'' };
+      this.showGoalModal = true;
+    },
+
+    async saveGoal() {
+      if (!this.goalForm.title.trim()) { showToast('Please enter a goal title', 'error'); return; }
+      if (!this.goalForm.target_amount || this.goalForm.target_amount <= 0) { showToast('Please enter a target amount', 'error'); return; }
+      this.savingGoal = true;
+      try {
+        const payload = { ...this.goalForm };
+        if (!payload.deadline) payload.deadline = null;
+        if (!payload.description) delete payload.description;
+        if (this.editingGoal) {
+          await API.patch(`/finance/goals/${this.editingGoal.id}`, payload);
+          showToast('Goal updated');
+        } else {
+          await API.post('/finance/goals', payload);
+          showToast('Goal created');
+        }
+        this.showGoalModal = false;
+        await this.loadGoals();
+      } catch(e) { showToast('Failed: ' + (e.message||e), 'error'); }
+      finally { this.savingGoal = false; }
+    },
+
+    async deleteGoal(id) {
+      if (!confirm('Delete this goal?')) return;
+      try {
+        await API.delete(`/finance/goals/${id}`);
+        this.goals = this.goals.filter(g=>g.id!==id);
+        showToast('Goal deleted');
+      } catch(e) { showToast('Failed to delete', 'error'); }
+    },
+
+    async setManualCurrent(g) {
+      if (g._manualInput == null || g._manualInput < 0) { showToast('Enter a valid amount', 'error'); return; }
+      try {
+        const updated = await API.patch(`/finance/goals/${g.id}`, { manual_current: g._manualInput });
+        const idx = this.goals.findIndex(x=>x.id===g.id);
+        if (idx >= 0) this.goals[idx] = { ...updated, _manualInput: null };
+        showToast('Progress updated');
+      } catch(e) { showToast('Failed', 'error'); }
+    },
+
+    // ── CRUD — Assets ─────────────────────────────────────────────────────
+
+    openAddAsset() {
+      this.editingAsset = null;
+      this.assetForm = { name:'', asset_type:'cash', amount:0, currency:'SGD', institution:'', notes:'' };
+      this.showAssetModal = true;
+    },
+
+    openEditAsset(a) {
+      this.editingAsset = a;
+      this.assetForm = { name:a.name, asset_type:a.asset_type, amount:a.amount, currency:a.currency, institution:a.institution||'', notes:a.notes||'' };
+      this.showAssetModal = true;
+    },
+
+    async saveAsset() {
+      if (!this.assetForm.name.trim()) { showToast('Please enter an asset name', 'error'); return; }
+      this.savingAsset = true;
+      try {
+        const payload = { ...this.assetForm };
+        if (!payload.institution) delete payload.institution;
+        if (!payload.notes) delete payload.notes;
+        if (this.editingAsset) {
+          const updated = await API.patch(`/finance/assets/${this.editingAsset.id}`, payload);
+          const idx = this.assets.findIndex(x=>x.id===this.editingAsset.id);
+          if (idx >= 0) this.assets[idx] = updated;
+          showToast('Asset updated');
+        } else {
+          const created = await API.post('/finance/assets', payload);
+          this.assets.push(created);
+          showToast('Asset saved');
+        }
+        this.showAssetModal = false;
+      } catch(e) { showToast('Failed: ' + (e.message||e), 'error'); }
+      finally { this.savingAsset = false; }
+    },
+
+    async deleteAsset(id) {
+      if (!confirm('Delete this asset? This cannot be undone.')) return;
+      try {
+        await API.delete(`/finance/assets/${id}`);
+        this.assets = this.assets.filter(a=>a.id!==id);
+        showToast('Asset deleted');
+      } catch(e) { showToast('Failed to delete', 'error'); }
+    },
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    toggleRevealAll() { this.revealAssets = !this.revealAssets; },
+
+    assetTotalsByCurrency() {
+      const totals = {};
+      this.assets.forEach(a => {
+        totals[a.currency] = (totals[a.currency]||0) + a.amount;
+      });
+      return totals;
+    },
+
+    statusIcon(s) { return {on_track:'🟢', beyond:'✨', at_risk:'🔴'}[s] || '🟡'; },
+    statusText(s) { return {on_track:'On Track', beyond:'Beyond', at_risk:'At Risk'}[s] || s; },
+    goalTypeLabel(t) { return {saving_target:'Saving', spending_limit:'Spending Limit', income_target:'Income Target', custom:'Custom'}[t] || t; },
+    assetTypeLabel(t) { return {cash:'Cash & Banking', investment:'Investments', property:'Property', crypto:'Crypto', cpf:'CPF', other:'Other'}[t] || t; },
+
+    catLabel(c) {
+      const map = { food:'Food', grocery:'Grocery', transport:'Transport', housing:'Housing', utilities:'Utilities', entertainment:'Entertainment', health:'Health', education:'Education', gift:'Gift', shopping:'Shopping', travel:'Travel', salary:'Salary', freelance:'Freelance', investment:'Investment', other:'Other' };
+      return map[c] || c;
+    },
+
+    catColor(c) {
+      const map = { food:'#f97316', grocery:'#84cc16', transport:'#3b82f6', housing:'#8B5CF6', utilities:'#06b6d4', entertainment:'#ec4899', health:'#ef4444', education:'#f59e0b', gift:'#d946ef', shopping:'#e11d48', travel:'#0891b2', salary:'#22c55e', freelance:'#16a34a', investment:'#7c3aed', other:'#9ca3af' };
+      return map[c] || '#9ca3af';
+    },
+  };
+}
+</script>
+</body>
+</html>
