@@ -329,7 +329,8 @@
               <div style="font-size:11.5px;color:#ABAAA5" x-text="tx.transaction_date + ' · ' + catLabel(tx.category)"></div>
             </div>
             <div class="tx-amount" :class="tx.transaction_type" x-text="(tx.transaction_type==='income' ? '+' : tx.transaction_type==='expense' ? '-' : '') + fmt(tx.amount) + ' ' + tx.currency"></div>
-            <button class="icon-btn danger" @click="deleteTransaction(tx.id)">🗑</button>
+            <button class="icon-btn" @click="openEditTransaction(tx)" title="Edit">✏️</button>
+            <button class="icon-btn danger" @click="deleteTransaction(tx.id)" title="Delete">🗑</button>
           </div>
         </template>
       </div>
@@ -763,6 +764,19 @@ function financeApp() {
     openAddTransaction() {
       this.editingTx = null;
       this.txForm = { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10) };
+      this.showTxModal = true;
+    },
+
+    openEditTransaction(tx) {
+      this.editingTx = tx;
+      this.txForm = {
+        amount: tx.amount,
+        transaction_type: tx.transaction_type,
+        category: tx.category,
+        currency: tx.currency,
+        description: tx.description || '',
+        transaction_date: tx.transaction_date,
+      };
       this.showTxModal = true;
     },
 
