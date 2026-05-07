@@ -539,6 +539,14 @@
         <label class="form-label">Description (optional)</label>
         <input type="text" class="form-input" x-model="goalForm.description" placeholder="Additional notes about this goal" />
       </div>
+      <div x-show="editingGoal" class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-input" x-model="goalForm.status">
+          <option value="active">Active</option>
+          <option value="achieved">Achieved ✅</option>
+          <option value="abandoned">Abandoned</option>
+        </select>
+      </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
         <button @click="showGoalModal=false" class="btn btn-secondary">Cancel</button>
         <button @click="saveGoal()" class="btn btn-primary" :disabled="savingGoal">
@@ -633,7 +641,7 @@ function financeApp() {
 
     // Forms
     txForm: { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10) },
-    goalForm: { title:'', goal_type:'saving_target', term:'mid', target_amount:0, currency:'SGD', deadline:'', description:'' },
+    goalForm: { title:'', goal_type:'saving_target', term:'mid', target_amount:0, currency:'SGD', deadline:'', description:'', status:'active' },
     assetForm: { name:'', asset_type:'cash', amount:0, currency:'SGD', institution:'', notes:'' },
 
     categories: ['food','grocery','transport','housing','utilities','entertainment','health','education','gift','shopping','travel','salary','freelance','investment','other'],
@@ -791,13 +799,13 @@ function financeApp() {
 
     openAddGoal() {
       this.editingGoal = null;
-      this.goalForm = { title:'', goal_type:'saving_target', term:'mid', target_amount:0, currency:'SGD', deadline:'', description:'' };
+      this.goalForm = { title:'', goal_type:'saving_target', term:'mid', target_amount:0, currency:'SGD', deadline:'', description:'', status:'active' };
       this.showGoalModal = true;
     },
 
     openEditGoal(g) {
       this.editingGoal = g;
-      this.goalForm = { title:g.title, goal_type:g.goal_type, term:g.term, target_amount:g.target_amount, currency:g.currency, deadline:g.deadline||'', description:g.description||'' };
+      this.goalForm = { title:g.title, goal_type:g.goal_type, term:g.term, target_amount:g.target_amount, currency:g.currency, deadline:g.deadline||'', description:g.description||'', status:g.status||'active' };
       this.showGoalModal = true;
     },
 
