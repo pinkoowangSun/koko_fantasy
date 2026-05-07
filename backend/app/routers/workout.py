@@ -1,5 +1,7 @@
+import asyncio
 from datetime import date, datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -22,8 +24,16 @@ from app.schemas.workout import (
     WorkoutPlanOut,
 )
 from app.services.ai_service import generate_workout_insights, generate_workout_plan, parse_workout_log
+from app.services.context_service import refresh_profile_summary
 
 router = APIRouter(prefix="/workout", tags=["workout"])
+
+
+def _user_local_date(user: User) -> date:
+    try:
+        return datetime.now(ZoneInfo(user.timezone or "UTC")).date()
+    except (ZoneInfoNotFoundError, Exception):
+        return date.today()
 
 
 def _week_start(d: date) -> date:
@@ -55,7 +65,7 @@ async def create_log(
     parsed = await parse_workout_log(current_user.id, body.raw_text)
     log = WorkoutLog(
         user_id=current_user.id,
-        log_date=body.log_date or date.today(),
+        log_date=body.log_date or _user_local_date(current_user),
         raw_text=body.raw_text,
         category=parsed.get("category"),
         summary=parsed.get("summary"),
@@ -85,6 +95,7 @@ async def create_log(
     log = (await db.execute(
         select(WorkoutLog).options(selectinload(WorkoutLog.exercises)).where(WorkoutLog.id == log.id)
     )).scalar_one()
+    asyncio.create_task(refresh_profile_summary(current_user.id))
     return log
 
 
@@ -246,7 +257,7 @@ async def get_plan(
     current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
-    ws = _week_start(date.today())
+    ws = _week_start(_user_local_date(current_user))
     plan = (await db.execute(
         select(WorkoutPlan).where(
             WorkoutPlan.user_id == current_user.id,
@@ -261,7 +272,8 @@ async def generate_plan(
     current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
-    four_weeks_ago = date.today() - timedelta(weeks=4)
+    today = _user_local_date(current_user)
+    four_weeks_ago = today - timedelta(weeks=4)
     logs = (await db.execute(
         select(WorkoutLog)
         .options(selectinload(WorkoutLog.exercises))
@@ -303,10 +315,10 @@ async def generate_plan(
 
     # Determine which days still need generating (today + future)
     _day_names = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-    today_idx = date.today().weekday()  # 0=Mon, 6=Sun
+    today_idx = today.weekday()  # 0=Mon, 6=Sun
     days_to_generate = _day_names[today_idx:]
 
-    ws = _week_start(date.today())
+    ws = _week_start(today)
     existing = (await db.execute(
         select(WorkoutPlan).where(
             WorkoutPlan.user_id == current_user.id,
@@ -354,7 +366,7 @@ async def get_insights(
     current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
-    eight_weeks_ago = date.today() - timedelta(weeks=8)
+    eight_weeks_ago = _user_local_date(current_user) - timedelta(weeks=8)
     logs = (await db.execute(
         select(WorkoutLog)
         .options(selectinload(WorkoutLog.exercises))

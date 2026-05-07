@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import List, Optional
 
@@ -10,6 +11,7 @@ from app.models.memory import MemoryItem
 from app.models.user import User
 from app.routers.auth import require_approved
 from app.schemas.memory import MemoryCreate, MemoryResponse, MemoryUpdate
+from app.services.context_service import refresh_profile_summary
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -36,6 +38,7 @@ async def create_memory(
     db.add(item)
     await db.commit()
     await db.refresh(item)
+    asyncio.create_task(refresh_profile_summary(current_user.id))
     return item
 
 
@@ -57,6 +60,7 @@ async def update_memory(
     item.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(item)
+    asyncio.create_task(refresh_profile_summary(current_user.id))
     return item
 
 
@@ -74,3 +78,4 @@ async def delete_memory(
         raise HTTPException(404, "Memory item not found")
     await db.delete(item)
     await db.commit()
+    asyncio.create_task(refresh_profile_summary(current_user.id))

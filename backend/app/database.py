@@ -37,6 +37,9 @@ async def init_db():
             "ALTER TABLE workout_logs ADD COLUMN duration_min INTEGER",
             "ALTER TABLE workout_logs ADD COLUMN calories_burnt INTEGER",
             "ALTER TABLE workout_exercises ADD COLUMN source VARCHAR DEFAULT 'user'",
+            "ALTER TABLE documents ADD COLUMN updated_at DATETIME",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_user_key ON memory_items (user_id, key)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_workout_plan_user_week ON workout_plans (user_id, week_start)",
         ]:
             try:
                 await conn.execute(text(sql))

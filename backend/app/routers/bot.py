@@ -1,5 +1,6 @@
 """Internal endpoints used exclusively by the Telegram bot, secured with BOT_API_KEY."""
 import asyncio
+import hmac
 import uuid
 from datetime import date, datetime, timedelta, timezone as _tz
 from pathlib import Path
@@ -141,7 +142,7 @@ def _fmt_dt(dt_utc: datetime, tz_str: Optional[str]) -> str:
 
 
 async def _bot_auth(x_bot_key: str = Header(...)):
-    if x_bot_key != settings.BOT_API_KEY:
+    if not hmac.compare_digest(x_bot_key, settings.BOT_API_KEY):
         raise HTTPException(403, "Forbidden")
 
 
@@ -233,6 +234,11 @@ async def _handle_complete_task(data: dict, user: User, db: AsyncSession) -> dic
         return {"response": "Couldn't find that task. Use /tasks to see your list.", "data": {}}
     task.status = "done"
     task.updated_at = datetime.utcnow()
+    pending = (await db.execute(
+        select(Reminder).where(Reminder.task_id == task.id, Reminder.sent.is_(False))
+    )).scalars().all()
+    for r in pending:
+        await db.delete(r)
     await db.commit()
     return {"response": f"✅ Done: *{task.title}*", "data": {"title": task.title}}
 
@@ -891,6 +897,16 @@ async def bot_doc_qa(body: BotDocQA, db: AsyncSession = Depends(get_db)):
 
 # ── Document upload ───────────────────────────────────────────────────────────
 
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+_ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
 @router.post("/upload-doc", dependencies=[Depends(_bot_auth)])
 async def bot_upload_doc(
     telegram_id: int = Form(...),
@@ -898,13 +914,19 @@ async def bot_upload_doc(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _require_user(telegram_id, db)
+
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
+    if file.content_type not in _ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported file type")
+
     user_dir = settings.DOCUMENTS_DIR / str(user.id)
     user_dir.mkdir(parents=True, exist_ok=True)
 
     ext = Path(file.filename or "file").suffix
     stored_name = f"{uuid.uuid4().hex}{ext}"
     file_path = user_dir / stored_name
-    content = await file.read()
     file_path.write_bytes(content)
 
     doc = Document(

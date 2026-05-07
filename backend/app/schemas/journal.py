@@ -1,22 +1,22 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
 from datetime import datetime, date
 
 
 class JournalCreate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
-    content_html: Optional[str] = None
-    mood: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=500)
+    content: Optional[str] = Field(None, max_length=50000)
+    content_html: Optional[str] = Field(None, max_length=100000)
+    mood: Optional[Literal["great", "good", "neutral", "low", "stressed"]] = None
     entry_date: date
     source: str = "web"
 
 
 class JournalUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
-    content_html: Optional[str] = None
-    mood: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=500)
+    content: Optional[str] = Field(None, max_length=50000)
+    content_html: Optional[str] = Field(None, max_length=100000)
+    mood: Optional[Literal["great", "good", "neutral", "low", "stressed"]] = None
 
 
 class JournalResponse(BaseModel):

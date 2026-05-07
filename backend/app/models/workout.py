@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Float, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Float, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -39,6 +39,7 @@ class WorkoutExercise(Base):
 
 class WorkoutPlan(Base):
     __tablename__ = "workout_plans"
+    __table_args__ = (UniqueConstraint("user_id", "week_start", name="uq_workout_plan_user_week"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)

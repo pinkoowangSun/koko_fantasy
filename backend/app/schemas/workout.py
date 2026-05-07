@@ -1,14 +1,14 @@
 from datetime import date, datetime
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class WorkoutExerciseCreate(BaseModel):
-    exercise_name: str
+    exercise_name: str = Field(..., max_length=200)
     sets: Optional[int] = None
-    reps: Optional[str] = None
+    reps: Optional[str] = Field(None, max_length=50)
     weight_kg: Optional[float] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 class WorkoutExerciseOut(BaseModel):
@@ -25,7 +25,7 @@ class WorkoutExerciseOut(BaseModel):
 
 
 class WorkoutLogCreate(BaseModel):
-    raw_text: str
+    raw_text: str = Field(..., max_length=5000)
     log_date: Optional[date] = None
     source: str = "web"
 

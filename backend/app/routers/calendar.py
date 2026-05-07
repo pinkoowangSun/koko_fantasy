@@ -1,5 +1,6 @@
-from datetime import date, datetime
+from datetime import date, datetime, time as time_
 from typing import List
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, or_, and_, func
@@ -30,6 +31,18 @@ MOOD_EMOJI = {
 }
 
 
+def _user_local_date(user: User) -> date:
+    try:
+        return datetime.now(ZoneInfo(user.timezone or "UTC")).date()
+    except (ZoneInfoNotFoundError, Exception):
+        return date.today()
+
+
+def _day_range(d: date):
+    """Return (start_datetime, end_datetime) covering the full calendar day."""
+    return datetime.combine(d, time_.min), datetime.combine(d, time_(23, 59, 59, 999999))
+
+
 @router.get("/events")
 async def get_events(
     start: date = Query(...),
@@ -38,15 +51,16 @@ async def get_events(
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id
+    start_dt = datetime.combine(start, time_.min)
+    end_dt = datetime.combine(end, time_(23, 59, 59, 999999))
     events: List[dict] = []
 
-    # Tasks with due_date in range
     tasks = (await db.execute(
         select(Task).where(
             Task.user_id == uid,
             Task.due_date.is_not(None),
-            Task.due_date >= str(start),
-            Task.due_date <= str(end) + " 23:59:59",
+            Task.due_date >= start_dt,
+            Task.due_date <= end_dt,
         )
     )).scalars().all()
     for t in tasks:
@@ -59,7 +73,6 @@ async def get_events(
             "extendedProps": {"type": "task", "ref_id": t.id, "status": t.status, "priority": t.priority},
         })
 
-    # Journal entries in range
     journal = (await db.execute(
         select(JournalEntry).where(
             JournalEntry.user_id == uid,
@@ -80,12 +93,11 @@ async def get_events(
             "extendedProps": {"type": "journal", "ref_id": j.id, "mood": j.mood},
         })
 
-    # Documents uploaded in range
     docs = (await db.execute(
         select(Document).where(
             Document.user_id == uid,
-            Document.created_at >= str(start),
-            Document.created_at <= str(end) + " 23:59:59",
+            Document.created_at >= start_dt,
+            Document.created_at <= end_dt,
         )
     )).scalars().all()
     for d in docs:
@@ -108,13 +120,13 @@ async def get_day_detail(
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id
-    day_str = day.isoformat()
+    day_start, day_end = _day_range(day)
 
     tasks = (await db.execute(
         select(Task).where(
             Task.user_id == uid,
-            Task.due_date >= day_str,
-            Task.due_date <= day_str + " 23:59:59",
+            Task.due_date >= day_start,
+            Task.due_date <= day_end,
         )
     )).scalars().all()
 
@@ -128,13 +140,13 @@ async def get_day_detail(
     docs = (await db.execute(
         select(Document).where(
             Document.user_id == uid,
-            Document.created_at >= day_str,
-            Document.created_at <= day_str + " 23:59:59",
+            Document.created_at >= day_start,
+            Document.created_at <= day_end,
         )
     )).scalars().all()
 
     return {
-        "date": day_str,
+        "date": day.isoformat(),
         "tasks": [
             {"id": t.id, "title": t.title, "status": t.status, "priority": t.priority}
             for t in tasks
@@ -164,16 +176,16 @@ async def get_today_summary(
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id
-    today = date.today()
-    today_str = today.isoformat()
+    today = _user_local_date(current_user)
+    today_start, today_end = _day_range(today)
 
     tasks = (await db.execute(
         select(Task).where(
             Task.user_id == uid,
             Task.status.notin_(["done", "cancelled"]),
             or_(
-                and_(Task.due_date >= today_str, Task.due_date <= today_str + " 23:59:59"),
-                and_(Task.due_date.is_(None), func.date(Task.created_at) == today_str),
+                and_(Task.due_date >= today_start, Task.due_date <= today_end),
+                and_(Task.due_date.is_(None), func.date(Task.created_at) == today.isoformat()),
             ),
         ).order_by(Task.created_at.desc())
     )).scalars().all()
@@ -186,7 +198,7 @@ async def get_today_summary(
     )).scalars().all()
 
     return {
-        "date": today_str,
+        "date": today.isoformat(),
         "tasks": [
             {"id": t.id, "title": t.title, "status": t.status, "priority": t.priority}
             for t in tasks

@@ -1,11 +1,11 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import datetime, timedelta, timezone
 
 
 class TaskCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title: str = Field(..., max_length=500)
+    description: Optional[str] = Field(None, max_length=10000)
     status: str = "todo"
     priority: str = "medium"
     due_date: Optional[datetime] = None
@@ -25,8 +25,8 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=500)
+    description: Optional[str] = Field(None, max_length=10000)
     status: Optional[str] = None
     priority: Optional[str] = None
     due_date: Optional[datetime] = None

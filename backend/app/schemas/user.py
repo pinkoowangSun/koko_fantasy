@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -8,6 +8,18 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = None
     timezone: Optional[str] = None
     preferences: Optional[Dict[str, Any]] = None
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, KeyError):
+            raise ValueError(f"Invalid timezone: {v!r}")
+        return v
 
 
 class UserResponse(BaseModel):

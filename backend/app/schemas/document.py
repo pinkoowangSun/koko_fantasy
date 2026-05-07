@@ -14,6 +14,7 @@ class DocumentResponse(BaseModel):
     source: str
     indexed: bool
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

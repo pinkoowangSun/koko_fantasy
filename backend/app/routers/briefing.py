@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -15,12 +16,19 @@ from app.services.ai_service import generate_briefing
 router = APIRouter(prefix="/briefing", tags=["briefing"])
 
 
+def _user_local_date(user: User) -> date:
+    try:
+        return datetime.now(ZoneInfo(user.timezone or "UTC")).date()
+    except (ZoneInfoNotFoundError, Exception):
+        return date.today()
+
+
 @router.get("/")
 async def get_briefing(
     current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
-    today = date.today()
+    today = _user_local_date(current_user)
     now = datetime.utcnow()
     next_24h = now + timedelta(hours=24)
 

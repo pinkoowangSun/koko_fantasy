@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import List, Optional
 
@@ -11,6 +12,7 @@ from app.models.task import Task
 from app.models.user import User
 from app.routers.auth import require_approved
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from app.services.context_service import refresh_profile_summary
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -51,6 +53,7 @@ async def create_task(
 
     await db.commit()
     await db.refresh(task)
+    asyncio.create_task(refresh_profile_summary(current_user.id))
     return task
 
 
@@ -97,6 +100,7 @@ async def update_task(
 
     await db.commit()
     await db.refresh(task)
+    asyncio.create_task(refresh_profile_summary(current_user.id))
     return task
 
 
@@ -121,3 +125,4 @@ async def delete_task(
 
     await db.delete(task)
     await db.commit()
+    asyncio.create_task(refresh_profile_summary(current_user.id))

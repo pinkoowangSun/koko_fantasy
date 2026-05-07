@@ -16,6 +16,16 @@ from app.services.rag_service import extract_text, index_document, query_and_ans
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
+ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
 
 @router.get("/", response_model=List[DocumentResponse])
 async def list_documents(
@@ -38,14 +48,18 @@ async def upload_document(
     current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported file type")
+
     user_dir = settings.DOCUMENTS_DIR / str(current_user.id)
     user_dir.mkdir(parents=True, exist_ok=True)
 
     ext = Path(file.filename or "file").suffix
     stored_name = f"{uuid.uuid4().hex}{ext}"
     file_path = user_dir / stored_name
-
-    content = await file.read()
     file_path.write_bytes(content)
 
     doc = Document(
@@ -104,7 +118,14 @@ async def delete_document(
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(404, "Document not found")
-    Path(doc.file_path).unlink(missing_ok=True)
+
+    # Guard against path traversal before unlinking
+    user_dir = settings.DOCUMENTS_DIR.resolve() / str(current_user.id)
+    resolved = Path(doc.file_path).resolve()
+    if not str(resolved).startswith(str(user_dir)):
+        raise HTTPException(400, "Invalid file path")
+
+    resolved.unlink(missing_ok=True)
     await db.delete(doc)
     await db.commit()
 

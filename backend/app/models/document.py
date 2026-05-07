@@ -17,3 +17,4 @@ class Document(Base):
     source = Column(String, default="web")          # telegram | web
     indexed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

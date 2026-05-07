@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, date
 from typing import List, Optional
 
@@ -10,6 +11,7 @@ from app.models.journal import JournalEntry
 from app.models.user import User
 from app.routers.auth import require_approved
 from app.schemas.journal import JournalCreate, JournalResponse, JournalUpdate
+from app.services.context_service import refresh_profile_summary
 
 router = APIRouter(prefix="/journal", tags=["journal"])
 
@@ -40,6 +42,7 @@ async def create_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    asyncio.create_task(refresh_profile_summary(current_user.id))
     return entry
 
 
@@ -77,6 +80,7 @@ async def update_entry(
     entry.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(entry)
+    asyncio.create_task(refresh_profile_summary(current_user.id))
     return entry
 
 
@@ -94,3 +98,4 @@ async def delete_entry(
         raise HTTPException(404, "Journal entry not found")
     await db.delete(entry)
     await db.commit()
+    asyncio.create_task(refresh_profile_summary(current_user.id))

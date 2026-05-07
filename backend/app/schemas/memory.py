@@ -1,17 +1,17 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
 from datetime import datetime
 
 
 class MemoryCreate(BaseModel):
-    key: str
-    value: str
-    category: str = "general"
+    key: str = Field(..., max_length=200)
+    value: str = Field(..., max_length=5000)
+    category: Literal["general", "preference", "fact", "note"] = "general"
 
 
 class MemoryUpdate(BaseModel):
-    value: Optional[str] = None
-    category: Optional[str] = None
+    value: Optional[str] = Field(None, max_length=5000)
+    category: Optional[Literal["general", "preference", "fact", "note"]] = None
 
 
 class MemoryResponse(BaseModel):
