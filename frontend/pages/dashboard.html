@@ -331,57 +331,53 @@
     </div>
 
     <!-- ── Step 2a: Task form ── -->
-    <div x-show="addEntry.type==='task'" style="padding:0 16px 28px">
-      <div style="background:#F6F5F2;border-radius:16px;overflow:hidden;margin-bottom:12px">
-        <div style="padding:13px 16px">
-          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Title</p>
-          <input x-model="addEntry.taskTitle"
-            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;padding:0"
-            placeholder="What needs to be done?" />
+    <div x-show="addEntry.type==='task'" style="padding:0 24px 28px">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label class="field-label">Title *</label>
+          <input x-model="addEntry.taskTitle" class="input" placeholder="What needs to be done?" />
         </div>
-        <div style="height:1px;background:#ECEAE5"></div>
-        <div style="padding:13px 16px">
-          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Notes</p>
-          <textarea x-model="addEntry.taskDesc" rows="2"
-            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;resize:none;font-family:inherit;padding:0;line-height:1.5"
-            placeholder="Add notes…"></textarea>
+        <div>
+          <label class="field-label">Description</label>
+          <textarea x-model="addEntry.taskDesc" class="input" rows="2" placeholder="Optional details…"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="field-label">Priority</label>
+            <select x-model="addEntry.taskPriority" class="input">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Status</label>
+            <select x-model="addEntry.taskStatus" class="input">
+              <option value="todo">Todo</option>
+              <option value="in_progress">In Progress</option>
+              <option value="done">Done</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Due date</label>
+          <input type="datetime-local" x-model="addEntry.taskDueDate" class="input"
+                 @change="if(addEntry.taskDueDate && addEntry.taskDueDate.length===10) addEntry.taskDueDate += 'T23:59'; else if(addEntry.taskDueDate && addEntry.taskDueDate.endsWith('T00:00')) addEntry.taskDueDate = addEntry.taskDueDate.slice(0,10) + 'T23:59'" />
+        </div>
+        <div>
+          <label class="field-label">Tags (comma-separated)</label>
+          <input x-model="addEntry.taskTags" class="input" placeholder="work, health, personal" />
         </div>
       </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-        <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px">
-          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Priority</p>
-          <select x-model="addEntry.taskPriority"
-            style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;cursor:pointer;appearance:none;padding:0">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </select>
-        </div>
-        <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px">
-          <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Due Date</p>
-          <input type="datetime-local" x-model="addEntry.taskDueDate"
-            style="width:100%;border:none;background:none;font-size:14px;color:#1A1917;outline:none;font-family:inherit;padding:0" />
-        </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+        <button @click="addEntry.open=false" class="btn btn-secondary">Cancel</button>
+        <button @click="saveEntry()" :disabled="addEntry.saving || !addEntry.taskTitle.trim()" class="btn btn-primary"
+                :style="(addEntry.saving || !addEntry.taskTitle.trim()) ? 'opacity:.5;cursor:not-allowed' : ''">
+          <span x-text="addEntry.saving ? 'Saving…' : 'Save Task'"></span>
+        </button>
       </div>
-
-      <div style="background:#F6F5F2;border-radius:16px;padding:13px 16px;margin-bottom:20px">
-        <p style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px">Tags</p>
-        <input x-model="addEntry.taskTags"
-          style="width:100%;border:none;background:none;font-size:15px;color:#1A1917;outline:none;font-family:inherit;padding:0"
-          placeholder="work, health, personal" />
-      </div>
-
-      <button @click="saveEntry()" :disabled="addEntry.saving || !addEntry.taskTitle.trim()"
-        style="width:100%;height:52px;background:#1A1917;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .12s"
-        :style="(addEntry.saving || !addEntry.taskTitle.trim()) ? 'opacity:.4;cursor:not-allowed' : 'opacity:1'">
-        <span x-text="addEntry.saving ? 'Saving…' : 'Add Task'"></span>
-      </button>
-      <button @click="addEntry.open=false"
-        style="width:100%;height:42px;background:none;border:none;font-size:14px;color:#ABAAA5;cursor:pointer;font-family:inherit;margin-top:4px">
-        Cancel
-      </button>
     </div>
 
     <!-- ── Step 2b: Journal form ── -->
@@ -489,7 +485,7 @@
       username: '',
       addEntry: {
         open: false, type: null, saving: false,
-        taskTitle: '', taskDesc: '', taskPriority: 'medium', taskDueDate: '', taskTags: '',
+        taskTitle: '', taskDesc: '', taskPriority: 'medium', taskStatus: 'todo', taskDueDate: '', taskTags: '',
         journalTitle: '', journalContent: '', journalMood: '', journalDate: '',
         docFile: null, docDesc: '',
       },
@@ -558,7 +554,7 @@
       openAddEntry() {
         this.addEntry = {
           open: true, type: null, saving: false,
-          taskTitle: '', taskDesc: '', taskPriority: 'medium', taskDueDate: '', taskTags: '',
+          taskTitle: '', taskDesc: '', taskPriority: 'medium', taskStatus: 'todo', taskDueDate: '', taskTags: '',
           journalTitle: '', journalContent: '', journalMood: '', journalDate: this.todayStr(),
           docFile: null, docDesc: '',
         };
@@ -572,7 +568,7 @@
               title: this.addEntry.taskTitle.trim(),
               description: this.addEntry.taskDesc || null,
               priority: this.addEntry.taskPriority,
-              status: 'todo',
+              status: this.addEntry.taskStatus,
               due_date: this.addEntry.taskDueDate || null,
               tags: this.addEntry.taskTags ? this.addEntry.taskTags.split(',').map(t => t.trim()).filter(Boolean) : [],
             });
