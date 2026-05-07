@@ -195,8 +195,8 @@
             </template>
           </div>
 
-          <!-- Day detail expand -->
-          <template x-for="day in days" :key="'d-' + day.key">
+          <!-- Day detail expand — today first, future next, past at bottom -->
+          <template x-for="day in sortedPlanDays" :key="'d-' + day.key">
             <template x-if="dayPlan(day.key) && !isRestDay(day.key) && (dayPlan(day.key).exercises || []).length > 0">
               <div class="card" style="margin-bottom:10px" :style="day.isPast ? 'opacity:0.45' : ''">
                 <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" @click="toggleDay(day.key)">
@@ -655,6 +655,13 @@ function workoutApp() {
 
     get rangeLabel() {
       return { '1W': 'last 7 days', '1M': 'last 30 days', '3M': 'last 3 months', '6M': 'last 6 months', 'all': 'all time' }[this.timeRange];
+    },
+
+    get sortedPlanDays() {
+      const today  = this.days.filter(d => d.isToday);
+      const future = this.days.filter(d => !d.isToday && !d.isPast);
+      const past   = this.days.filter(d => d.isPast);
+      return [...today, ...future, ...past];
     },
 
     // Category legend — array of objects so x-for can reference properties directly
