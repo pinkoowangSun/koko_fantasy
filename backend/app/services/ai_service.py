@@ -186,30 +186,6 @@ async def generate_contextual_response(
         return "I'm having trouble pulling your data right now. Try again in a moment!"
 
 
-# ── Web chat (unchanged) ──────────────────────────────────────────────────────
-
-async def chat(user_id: int, message: str, user_context: str = "", source: str = "web") -> str:
-    history = await _get_recent_history(user_id, limit=10)
-    system = (
-        "You are Koko, a friendly personal life management assistant. "
-        "Be concise, warm, and helpful.\n"
-        + (f"User context: {user_context}" if user_context else "")
-    )
-
-    messages = [{"role": "system", "content": system}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": message})
-
-    resp = await _client.chat.completions.create(
-        model=settings.DEEPSEEK_MODEL,
-        messages=messages,
-        temperature=0.7,
-    )
-    reply = resp.choices[0].message.content
-    await _save_messages(user_id, message, reply, source)
-    return reply
-
-
 # ── Briefing (unchanged) ──────────────────────────────────────────────────────
 
 async def generate_briefing(
