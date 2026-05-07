@@ -59,6 +59,7 @@ async def create_log(
         category=parsed.get("category"),
         summary=parsed.get("summary"),
         duration_min=parsed.get("duration_min"),
+        calories_burnt=parsed.get("calories_burnt"),
         source=body.source,
     )
     db.add(log)
@@ -110,6 +111,7 @@ async def update_log(
         log.category = parsed.get("category")
         log.summary = parsed.get("summary")
         log.duration_min = parsed.get("duration_min")
+        log.calories_burnt = parsed.get("calories_burnt")
 
         # Replace previously AI-extracted exercises with fresh parse
         old_ai = (await db.execute(

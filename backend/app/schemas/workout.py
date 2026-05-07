@@ -42,6 +42,7 @@ class WorkoutLogOut(BaseModel):
     category: Optional[str]
     summary: Optional[str]
     duration_min: Optional[int] = None
+    calories_burnt: Optional[int] = None
     source: str
     created_at: datetime
     exercises: list[WorkoutExerciseOut] = []

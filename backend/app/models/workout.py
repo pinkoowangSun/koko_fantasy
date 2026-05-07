@@ -13,7 +13,8 @@ class WorkoutLog(Base):
     raw_text = Column(Text, nullable=False)
     category = Column(String, nullable=True)   # cardio | upper_body | lower_body | core | flexibility | mixed | rest
     summary = Column(Text, nullable=True)       # AI-generated concise summary
-    duration_min = Column(Integer, nullable=True)  # AI-extracted total session duration
+    duration_min = Column(Integer, nullable=True)    # AI-extracted total session duration
+    calories_burnt = Column(Integer, nullable=True)  # AI-estimated kcal
     source = Column(String, default="web")      # web | telegram
     created_at = Column(DateTime, default=datetime.utcnow)
 

@@ -242,6 +242,7 @@ async def parse_workout_log(user_id: int, text: str) -> dict:
         '  "category": "<cardio|upper_body|lower_body|core|flexibility|mixed|rest>",\n'
         '  "summary": "<concise 1-2 sentence summary>",\n'
         '  "duration_min": <integer total minutes or null>,\n'
+        '  "calories_burnt": <estimated integer kcal or null>,\n'
         '  "exercises": [\n'
         '    {"exercise_name": "<name>", "sets": <int or null>, "reps": "<string or null>", "weight_kg": <float or null>, "notes": "<string or null>"}\n'
         '  ]\n'
@@ -252,6 +253,7 @@ async def parse_workout_log(user_id: int, text: str) -> dict:
         '- For cardio (running, cycling, swimming): one entry, use reps for distance/duration (e.g. "5km", "30 min"), notes for pace if given\n'
         '- sets/weight_kg: integer/float only when explicitly stated, otherwise null\n'
         '- duration_min: total session time in minutes when mentioned, else null\n'
+        '- calories_burnt: estimate kcal based on exercise type, duration, and intensity; assume 70kg body weight if unknown; cardio ~600 kcal/hr running / ~500 cycling / ~300 walking; strength ~300-500 kcal/hr; return null only if too vague\n'
         '- exercises: empty array [] if nothing specific is mentioned\n'
         '- Return valid JSON only.'
     )
@@ -267,7 +269,7 @@ async def parse_workout_log(user_id: int, text: str) -> dict:
     try:
         return json.loads(resp.choices[0].message.content)
     except json.JSONDecodeError:
-        return {"category": "mixed", "summary": text[:200], "duration_min": None, "exercises": []}
+        return {"category": "mixed", "summary": text[:200], "duration_min": None, "calories_burnt": None, "exercises": []}
 
 
 async def generate_workout_insights(logs_data: list) -> dict:

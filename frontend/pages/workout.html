@@ -274,7 +274,7 @@
           <div class="card" style="margin-bottom:14px">
             <div style="margin-bottom:10px">
               <div class="section-label" x-text="'Session Intensity — ' + rangeLabel"></div>
-              <div style="font-size:11.5px;color:#ABAAA5;margin-top:3px">Bars = sets logged &nbsp;·&nbsp; Line = max weight (kg)</div>
+              <div style="font-size:11.5px;color:#ABAAA5;margin-top:3px">Bars = estimated calories burnt (kcal)</div>
             </div>
             <!-- Legend using same cat-badge classes as history items -->
             <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
@@ -373,6 +373,9 @@
                     <span class="cat-badge" :class="'cat-' + (log.category || 'mixed')" x-text="(log.category || 'mixed').replace(/_/g,' ')"></span>
                     <template x-if="log.duration_min">
                       <span style="font-size:11.5px;color:#ABAAA5">⏱ <span x-text="log.duration_min + ' min'"></span></span>
+                    </template>
+                    <template x-if="log.calories_burnt">
+                      <span style="font-size:11.5px;color:#ABAAA5">🔥 <span x-text="log.calories_burnt + ' kcal'"></span></span>
                     </template>
                     <span style="font-size:11.5px;color:#ABAAA5" x-text="log.source === 'telegram' ? '📱 Telegram' : '💻 Web'"></span>
                   </div>
@@ -820,18 +823,9 @@ function workoutApp() {
       // Oldest-first for left-to-right timeline; cap at 50 to keep labels readable
       const sessions = [...this.filteredLogs].slice(0, 50).reverse();
 
-      const labels    = sessions.map(l => this.fmtLogDate(l.log_date));
-      const totalSets = sessions.map(l =>
-        l.exercises && l.exercises.length > 0
-          ? l.exercises.reduce((s, e) => s + (e.sets || 0), 0)
-          : 1  // session happened but no structured data — mark with 1
-      );
-      const maxWeight = sessions.map(l => {
-        if (!l.exercises || l.exercises.length === 0) return null;
-        const weights = l.exercises.map(e => e.weight_kg).filter(w => w != null);
-        return weights.length ? Math.max(...weights) : null;
-      });
-      const barColors = sessions.map(l => (CAT[l.category] || CAT.mixed).bg);
+      const labels   = sessions.map(l => this.fmtLogDate(l.log_date));
+      const calories = sessions.map(l => l.calories_burnt || 0);
+      const barColors  = sessions.map(l => (CAT[l.category] || CAT.mixed).bg);
       const barBorders = sessions.map(l => (CAT[l.category] || CAT.mixed).fg);
 
       _chart = new Chart(el, {
@@ -840,28 +834,12 @@ function workoutApp() {
           datasets: [
             {
               type: 'bar',
-              label: 'Total Sets',
-              data: totalSets,
+              label: 'Calories Burnt',
+              data: calories,
               backgroundColor: barColors,
               borderColor: barBorders,
               borderWidth: 1.5,
               borderRadius: 5,
-              yAxisID: 'ySets',
-              order: 2,
-            },
-            {
-              type: 'line',
-              label: 'Max Weight (kg)',
-              data: maxWeight,
-              borderColor: '#1A1917',
-              backgroundColor: 'transparent',
-              pointBackgroundColor: '#1A1917',
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              tension: 0.35,
-              spanGaps: true,       // connect across sessions with no weight data
-              yAxisID: 'yKg',
-              order: 1,
             },
           ],
         },
@@ -876,28 +854,16 @@ function workoutApp() {
             },
             tooltip: {
               callbacks: {
-                label: ctx => {
-                  if (ctx.dataset.label === 'Total Sets') return ` ${ctx.parsed.y} sets`;
-                  if (ctx.parsed.y != null)                return ` ${ctx.parsed.y} kg (max)`;
-                  return null;
-                },
+                label: ctx => ctx.parsed.y ? ` ${ctx.parsed.y} kcal` : null,
               },
             },
           },
           scales: {
-            ySets: {
-              position: 'left',
-              beginAtZero: true,
-              ticks: { stepSize: 1, precision: 0, font: { size: 11 } },
-              title: { display: true, text: 'Sets', font: { size: 11 } },
-              grid: { color: '#F0EFE9' },
-            },
-            yKg: {
-              position: 'right',
+            y: {
               beginAtZero: true,
               ticks: { font: { size: 11 } },
-              title: { display: true, text: 'Max kg', font: { size: 11 } },
-              grid: { display: false },
+              title: { display: true, text: 'kcal', font: { size: 11 } },
+              grid: { color: '#F0EFE9' },
             },
             x: {
               ticks: { font: { size: 11 }, maxRotation: 40 },
