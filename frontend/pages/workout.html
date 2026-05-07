@@ -64,6 +64,8 @@
 
     .spinner { display:inline-block; width:16px; height:16px; border:2px solid #E8E7E3; border-top-color:#1A1917; border-radius:50%; animation:spin .6s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
+
+    .day-card.past-day { opacity:0.45; }
   </style>
 </head>
 <body x-data="workoutApp()" x-init="init()">
@@ -157,7 +159,7 @@
           <!-- 7-day grid -->
           <div class="week-grid">
             <template x-for="day in days" :key="day.key">
-              <div class="day-card" :class="{today: day.isToday, 'rest-day': isRestDay(day.key)}">
+              <div class="day-card" :class="{today: day.isToday, 'rest-day': isRestDay(day.key), 'past-day': day.isPast}">
                 <div class="day-name" x-text="day.label"></div>
                 <template x-if="dayPlan(day.key)">
                   <div>
@@ -196,7 +198,7 @@
           <!-- Day detail expand -->
           <template x-for="day in days" :key="'d-' + day.key">
             <template x-if="dayPlan(day.key) && !isRestDay(day.key) && (dayPlan(day.key).exercises || []).length > 0">
-              <div class="card" style="margin-bottom:10px">
+              <div class="card" style="margin-bottom:10px" :style="day.isPast ? 'opacity:0.45' : ''">
                 <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" @click="toggleDay(day.key)">
                   <div>
                     <span style="font-size:13px;font-weight:600;color:#1A1917" x-text="day.label + ' — ' + dayPlan(day.key).focus"></span>
@@ -392,8 +394,8 @@
                   </div>
                 </div>
 
-                <!-- Summary (always visible) -->
-                <div style="font-size:13px;color:#4A4940;line-height:1.5" x-text="log.summary || log.raw_text"></div>
+                <!-- Raw input (always visible) -->
+                <div style="font-size:13px;color:#4A4940;line-height:1.5" x-text="log.raw_text"></div>
 
                 <!-- Collapsible exercises -->
                 <template x-if="log.exercises && log.exercises.length > 0">
@@ -662,7 +664,7 @@ function workoutApp() {
       const names  = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
       const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
       const todayIdx = (new Date().getDay() + 6) % 7;
-      return names.map((k, i) => ({ key: k, label: labels[i], isToday: i === todayIdx }));
+      return names.map((k, i) => ({ key: k, label: labels[i], isToday: i === todayIdx, isPast: i < todayIdx }));
     })(),
 
     get weekLabel() {

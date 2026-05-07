@@ -329,11 +329,15 @@ Rules:
         }
 
 
+_WEEK_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
+
 async def generate_workout_plan(
     user_id: int,
     logs_context: str,
     user_memory: str = "",
     workout_preference: str = "",
+    days_to_generate: list[str] | None = None,
 ) -> dict:
     today_name = datetime.now().strftime("%A")
     history_block = logs_context.strip() or "No workout history yet — design a well-rounded beginner-friendly starter plan."
@@ -342,6 +346,31 @@ async def generate_workout_plan(
         f"\n⭐ WORKOUT PREFERENCE (user-specified — treat this as the highest priority input):\n{workout_preference.strip()}"
         if workout_preference.strip() else ""
     )
+
+    target_days = days_to_generate if days_to_generate else _WEEK_DAYS
+    day_schema = (
+        '{"focus": "...", "warmup": "...", "exercises": '
+        '[{"name": "...", "sets": 0, "reps": "...", "weight": "...", "notes": "..."}], '
+        '"cooldown": "...", "duration_min": 0, "notes": "..."}'
+    )
+    plan_entries = ",\n    ".join(f'"{d}": {day_schema}' for d in target_days)
+
+    if days_to_generate:
+        scope_line = (
+            f"Generate a workout plan for ONLY these remaining days of the week: "
+            f"{', '.join(days_to_generate)}. "
+            "Past days are already fixed — do not include them."
+        )
+        days_rule = f"Only the requested days must appear in the plan: {', '.join(days_to_generate)}."
+    else:
+        scope_line = (
+            "Generate a personalised, detailed weekly workout plan starting from Monday. "
+            "Adapt the intensity, volume, and exercise selection based on the history above. "
+            "If the user has been skipping certain muscle groups, include them. "
+            "If they trained heavily recently, schedule deload or recovery. "
+            "For complete beginners, start conservative with full-body sessions."
+        )
+        days_rule = "All 7 days must be present in the plan."
 
     prompt = f"""\
 You are an expert certified personal trainer. Today is {today_name}.
@@ -352,33 +381,23 @@ USER WORKOUT HISTORY (last 4 weeks):
 OTHER USER PROFILE DATA:
 {memory_block}
 
-Generate a personalised, detailed weekly workout plan starting from Monday. \
-Adapt the intensity, volume, and exercise selection based on the history above. \
-If the user has been skipping certain muscle groups, include them. \
-If they trained heavily recently, schedule deload or recovery. \
-For complete beginners, start conservative with full-body sessions.
+{scope_line}
 
 Return ONLY this JSON (no markdown fences):
 {{
   "plan": {{
-    "monday":    {{"focus": "...", "warmup": "...", "exercises": [{{"name": "...", "sets": 0, "reps": "...", "weight": "...", "notes": "..."}}], "cooldown": "...", "duration_min": 0, "notes": "..."}},
-    "tuesday":   {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
-    "wednesday": {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
-    "thursday":  {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
-    "friday":    {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
-    "saturday":  {{"focus": "...", "warmup": "...", "exercises": [], "cooldown": "...", "duration_min": 0, "notes": "..."}},
-    "sunday":    {{"focus": "Rest / Active Recovery", "warmup": "", "exercises": [], "cooldown": "", "duration_min": 0, "notes": "..."}}
+    {plan_entries}
   }},
   "notes": "<overall rationale: split logic, key adaptations from history, progression tips>"
 }}
 
 Rules:
 - 3–6 exercises per active day; rest days have empty exercises array
-- Include 1–2 rest or active-recovery days
+- Include 1–2 rest or active-recovery days where appropriate
 - Balance push / pull / legs across the week
 - weight field: use descriptive strings like "bodyweight", "moderate", "65–75% 1RM", "light"
 - reps field: use strings like "8–10", "12–15", "30 sec", "AMRAP"
-- All 7 days must be present in the plan
+- {days_rule}
 """
     resp = await _client.chat.completions.create(
         model=settings.DEEPSEEK_MODEL,

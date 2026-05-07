@@ -301,7 +301,10 @@ async def generate_plan(
         if m.key.strip().lower() != "workout"
     )
 
-    result = await generate_workout_plan(current_user.id, logs_context, user_memory, workout_pref)
+    # Determine which days still need generating (today + future)
+    _day_names = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    today_idx = date.today().weekday()  # 0=Mon, 6=Sun
+    days_to_generate = _day_names[today_idx:]
 
     ws = _week_start(date.today())
     existing = (await db.execute(
@@ -311,8 +314,23 @@ async def generate_plan(
         )
     )).scalar_one_or_none()
 
+    # Preserve entries for past days from the current plan
+    past_plan: dict = {}
+    if existing and existing.plan:
+        for i in range(today_idx):
+            key = _day_names[i]
+            if key in existing.plan:
+                past_plan[key] = existing.plan[key]
+
+    result = await generate_workout_plan(
+        current_user.id, logs_context, user_memory, workout_pref,
+        days_to_generate=days_to_generate if today_idx > 0 else None,
+    )
+
+    merged_plan = {**past_plan, **result.get("plan", {})}
+
     if existing:
-        existing.plan = result.get("plan", {})
+        existing.plan = merged_plan
         existing.ai_notes = result.get("notes")
         existing.generated_at = datetime.utcnow()
         await db.commit()
@@ -322,7 +340,7 @@ async def generate_plan(
     plan = WorkoutPlan(
         user_id=current_user.id,
         week_start=ws,
-        plan=result.get("plan", {}),
+        plan=merged_plan,
         ai_notes=result.get("notes"),
     )
     db.add(plan)
