@@ -186,9 +186,11 @@ Always include record_type in the data field for create/delete+finance so the sy
 ━━━ WORKOUT TRIGGERS ━━━
 Use create+workout when the user describes any physical activity \
 (ran, walked, lifted, gym, workout, exercise, pushups, squats, cycling, swimming, etc.).
-Use list+workout when asking about past workouts, exercise history, recent sessions, or progress \
-("what have I been doing", "show my workout history", "how many times did I work out").
-Use read+workout when asking about their plan or what to do today.
+Use list+workout when asking about past logged sessions, exercise history, recent activity, or progress \
+("what have I been doing", "show my workout history", "how many times did I work out", \
+"what did I do yesterday", "what exercises did I do last week", "did I work out on Monday").
+Use read+workout ONLY when asking about their scheduled plan or what to do today \
+("what's my plan today", "what should I do today", "show my workout plan").
 Use generate+workout when asking to create or regenerate a weekly plan.
 Use update+workout when the user corrects or adjusts a logged session \
 ("actually it was 45 min", "that was 400 calories", "I did 4 sets not 3", \
