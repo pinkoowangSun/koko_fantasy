@@ -34,7 +34,7 @@ from app.services.ai_service import (
     generate_workout_plan,
 )
 from app.services.context_service import build_rich_context, refresh_profile_summary
-from app.services.intent_registry import ACTION_CONFIGS
+from app.services.intent_registry import ACTION_CONFIGS, DOMAIN_CONFIGS
 from app.services.rag_service import extract_text, index_document, query_and_answer
 
 router = APIRouter(prefix="/bot", tags=["bot"])
@@ -921,7 +921,7 @@ async def _execute_write(action: str, domain: str, data: dict, user: User, db: A
     return {"response": "Something went wrong. Please try again.", "data": {}}
 
 
-async def _execute_read(action: str, domain: str, data: dict, user: User, db: AsyncSession) -> dict:
+async def _execute_read(action: str, domain: str, data: dict, user: User, db: AsyncSession) -> dict | None:
     try:
         if domain == "task" and action == "list":
             return await _handle_list_tasks(user, db)
@@ -949,7 +949,7 @@ async def _execute_read(action: str, domain: str, data: dict, user: User, db: As
     except Exception as exc:
         print(f"[bot] execute_read failed {action}+{domain}: {exc}")
 
-    return {"response": "Something went wrong. Please try again.", "data": {}}
+    return None
 
 
 # ── Main intent endpoint ──────────────────────────────────────────────────────
@@ -1008,7 +1008,21 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
     # READ
     if tier == "read":
         result = await _execute_read(phase1.action, phase1.domain, phase1.data, user, db)
-        return {"action": phase1.action, "domain": phase1.domain, **result}
+        if result is not None:
+            return {"action": phase1.action, "domain": phase1.domain, **result}
+        # No hardcoded handler — fall through to conversational with domain context
+        domain_cfg = DOMAIN_CONFIGS.get(phase1.domain)
+        scope = [domain_cfg.scope_kw] if domain_cfg and domain_cfg.scope_kw else []
+        if not scope:
+            return {"action": "chat", "domain": phase1.domain, "response": phase1.response, "data": {}}
+        rich_ctx = await build_rich_context(user.id, db, scope)
+        response = await generate_contextual_response(
+            user_id=user.id,
+            message=body.message,
+            profile_summary=user.profile_summary or "",
+            rich_context=rich_ctx,
+        )
+        return {"action": "chat", "domain": phase1.domain, "response": response, "data": {}}
 
     # CONVERSATIONAL
     if tier == "conversational":

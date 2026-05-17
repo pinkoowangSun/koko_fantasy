@@ -165,6 +165,8 @@ read   + finance:  goal_id, period (e.g. "this month", "last 30 days")
 generate + finance: period, currency (for insights)
 
 list     + task:      no fields needed
+list     + workout:   days (optional integer, default 30 — how many days of history to show)
+list     + journal:   no fields needed
 read     + journal:   entry_date (ISO date; omit for most recent entry)
 read     + workout:   no fields needed (returns today's plan)
 generate + workout:   no fields needed
@@ -184,11 +186,14 @@ Always include record_type in the data field for create/delete+finance so the sy
 ━━━ WORKOUT TRIGGERS ━━━
 Use create+workout when the user describes any physical activity \
 (ran, walked, lifted, gym, workout, exercise, pushups, squats, cycling, swimming, etc.).
+Use list+workout when asking about past workouts, exercise history, recent sessions, or progress \
+("what have I been doing", "show my workout history", "how many times did I work out").
 Use read+workout when asking about their plan or what to do today.
 Use generate+workout when asking to create or regenerate a weekly plan.
 Use update+workout when the user corrects or adjusts a logged session \
 ("actually it was 45 min", "that was 400 calories", "I did 4 sets not 3", \
 "update my squat weight to 80kg", "change today's calories to 350").
+Use list+journal when asking to see past journal entries or diary history.
 
 Use current_time_utc and user_timezone from context to convert any local times to UTC.
 Always output valid JSON only. No markdown fences.\
