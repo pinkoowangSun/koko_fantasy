@@ -61,16 +61,17 @@ async def get_events(
     tasks = (await db.execute(
         select(Task).where(
             Task.user_id == uid,
-            Task.due_date.is_not(None),
-            Task.due_date >= start_dt,
-            Task.due_date <= end_dt,
+            or_(
+                and_(Task.due_date.is_not(None), Task.due_date >= start_dt, Task.due_date <= end_dt),
+                and_(Task.due_date.is_(None), Task.created_at >= start_dt, Task.created_at <= end_dt),
+            ),
         )
     )).scalars().all()
     for t in tasks:
         events.append({
             "id": f"task-{t.id}",
             "title": t.title,
-            "start": t.due_date.date().isoformat(),
+            "start": (t.due_date.date() if t.due_date else t.created_at.date()).isoformat(),
             "backgroundColor": PRIORITY_COLOR.get(t.priority, "#3b82f6"),
             "borderColor": PRIORITY_COLOR.get(t.priority, "#3b82f6"),
             "extendedProps": {"type": "task", "ref_id": t.id, "status": t.status, "priority": t.priority},
@@ -158,8 +159,10 @@ async def get_day_detail(
     tasks = (await db.execute(
         select(Task).where(
             Task.user_id == uid,
-            Task.due_date >= day_start,
-            Task.due_date <= day_end,
+            or_(
+                and_(Task.due_date >= day_start, Task.due_date <= day_end),
+                and_(Task.due_date.is_(None), func.date(Task.created_at) == day.isoformat()),
+            ),
         )
     )).scalars().all()
 
