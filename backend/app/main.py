@@ -80,3 +80,7 @@ if FRONTEND_DIR.exists():
     @app.get("/finance")
     async def serve_finance():
         return FileResponse(str(FRONTEND_DIR / "pages" / "finance.html"))
+
+    @app.get("/journal")
+    async def serve_journal():
+        return FileResponse(str(FRONTEND_DIR / "pages" / "journal.html"))

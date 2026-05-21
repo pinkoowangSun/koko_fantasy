@@ -115,7 +115,9 @@ function initCommandPalette() {
   const NAV = [
     { label: 'Daily Tracker', icon: '📅', hint: 'Page', section: 'Navigate', action: () => location.href = '/dashboard' },
     { label: 'Tasks',         icon: '✅', hint: 'Page', section: 'Navigate', action: () => location.href = '/tasks'     },
+    { label: 'Journal',       icon: '📓', hint: 'Page', section: 'Navigate', action: () => location.href = '/journal'   },
     { label: 'Workout',       icon: '🏋️', hint: 'Page', section: 'Navigate', action: () => location.href = '/workout'   },
+    { label: 'Finance',       icon: '💰', hint: 'Page', section: 'Navigate', action: () => location.href = '/finance'   },
     { label: 'Documents',     icon: '📄', hint: 'Page', section: 'Navigate', action: () => location.href = '/documents' },
     { label: 'Profile',       icon: '👤', hint: 'Page', section: 'Navigate', action: () => location.href = '/profile'   },
     { label: 'Sign out',      icon: '←',  hint: '',     section: 'Account',  action: logout },

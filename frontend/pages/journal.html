@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Koko — Journal</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Chart card ────────────────────────────────────────────── */
+    .chart-card {
+      background: #fff;
+      border: 1px solid #E8E7E3;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .chart-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .chart-title-block h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1A1917;
+      margin: 0 0 2px;
+    }
+    .chart-title-block p {
+      font-size: 12px;
+      color: #ABAAA5;
+      margin: 0;
+    }
+    .range-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .range-preset {
+      padding: 5px 13px;
+      border-radius: 999px;
+      border: 1px solid #E8E7E3;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #fff;
+      color: #78776E;
+      font-family: inherit;
+      transition: all .1s;
+    }
+    .range-preset.active {
+      background: #1A1917;
+      color: #fff;
+      border-color: #1A1917;
+    }
+    .range-sep { color: #E8E7E3; font-size: 12px; }
+    .range-date {
+      padding: 5px 9px;
+      border: 1px solid #E8E7E3;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-family: inherit;
+      color: #1A1917;
+      background: #fff;
+    }
+    .range-date:focus { outline: none; border-color: #1A1917; }
+    .chart-canvas-wrap { position: relative; height: 200px; }
+    .mood-legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #F0EFE9;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #78776E;
+    }
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Entry list ────────────────────────────────────────────── */
+    .list-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .list-count {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1A1917;
+      margin-right: auto;
+    }
+    .list-count span { color: #ABAAA5; font-weight: 400; font-size: 12px; }
+    .mood-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1px solid #E8E7E3;
+      font-size: 12.5px;
+      cursor: pointer;
+      background: #fff;
+      color: #78776E;
+      font-family: inherit;
+      transition: all .1s;
+    }
+    .mood-pill.active { background: #1A1917; color: #fff; border-color: #1A1917; }
+
+    .entry-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 16px;
+      background: #fff;
+      border: 1px solid #E8E7E3;
+      border-radius: 10px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: box-shadow .12s, border-color .12s;
+    }
+    .entry-row:hover {
+      box-shadow: 0 2px 10px rgba(0,0,0,.07);
+      border-color: #C8C7C2;
+    }
+    .entry-date-col {
+      flex-shrink: 0;
+      width: 64px;
+      text-align: center;
+    }
+    .entry-date-day  { font-size: 20px; font-weight: 600; color: #1A1917; line-height: 1.1; }
+    .entry-date-mon  { font-size: 11px; color: #ABAAA5; font-weight: 500; text-transform: uppercase; letter-spacing: .4px; }
+    .entry-date-year { font-size: 11px; color: #ABAAA5; }
+    .entry-divider   { width: 1px; align-self: stretch; background: #F0EFE9; flex-shrink: 0; }
+    .entry-body      { flex: 1; min-width: 0; }
+    .entry-title     { font-size: 14px; font-weight: 500; color: #1A1917; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 3px; }
+    .entry-preview   { font-size: 12.5px; color: #ABAAA5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .entry-meta      { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+    .mood-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 2px 9px;
+      border-radius: 999px;
+    }
+    .src-badge {
+      font-size: 10.5px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #F0EFE9;
+      color: #78776E;
+      font-weight: 500;
+    }
+
+    /* ── Pagination ─────────────────────────────────────────────── */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .page-btn {
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      border-radius: 8px;
+      border: 1px solid #E8E7E3;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #fff;
+      color: #78776E;
+      font-family: inherit;
+      transition: all .1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .page-btn:hover:not(:disabled) { background: #F6F5F2; border-color: #C8C7C2; }
+    .page-btn.active  { background: #1A1917; color: #fff; border-color: #1A1917; }
+    .page-btn:disabled { opacity: .35; cursor: default; }
+    .page-ellipsis { color: #ABAAA5; font-size: 13px; padding: 0 4px; }
+    .page-info { font-size: 12px; color: #ABAAA5; margin: 0 8px; }
+
+    /* ── Modal ──────────────────────────────────────────────────── */
+    .j-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(26,25,23,.5);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .j-modal {
+      background: #fff;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 580px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .j-modal-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid #F0EFE9;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .j-modal-meta { flex: 1; min-width: 0; }
+    .j-modal-date { font-size: 13px; font-weight: 600; color: #1A1917; }
+    .j-modal-submeta { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+    .j-modal-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .j-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+    }
+    .j-content-view {
+      font-size: 14.5px;
+      line-height: 1.75;
+      color: #1A1917;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .j-content-view p { margin: 0 0 10px; }
+    .j-modal-footer {
+      padding: 14px 24px;
+      border-top: 1px solid #F0EFE9;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .j-form-field { margin-bottom: 14px; }
+    .j-form-field label { display: block; font-size: 11.5px; font-weight: 600; color: #78776E; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
+    .j-textarea { width: 100%; min-height: 160px; padding: 10px 12px; border: 1px solid #E8E7E3; border-radius: 8px; font-size: 14px; font-family: inherit; box-sizing: border-box; resize: vertical; line-height: 1.65; }
+    .j-textarea:focus { outline: none; border-color: #1A1917; }
+    .mood-select-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .mood-opt {
+      flex: 1;
+      min-width: 80px;
+      padding: 8px 6px;
+      border-radius: 9px;
+      border: 1.5px solid #E8E7E3;
+      text-align: center;
+      cursor: pointer;
+      font-size: 12.5px;
+      font-family: inherit;
+      font-weight: 500;
+      background: #fff;
+      color: #78776E;
+      transition: all .1s;
+    }
+    .mood-opt.selected { border-color: #1A1917; background: #1A1917; color: #fff; }
+    .empty-state {
+      text-align: center;
+      padding: 56px 20px;
+      color: #ABAAA5;
+    }
+    .empty-state p { font-size: 14px; margin-top: 8px; }
+
+    @media (max-width: 600px) {
+      .chart-header { flex-direction: column; }
+      .range-controls { width: 100%; }
+      .entry-date-col { width: 48px; }
+      .entry-date-day { font-size: 17px; }
+    }
+  </style>
+</head>
+<body x-data="journalApp()" x-init="init()">
+
+<div class="page-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="sidebar-logo-mark">✦</span>
+      <span class="sidebar-logo-text" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></span>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="/dashboard" class="nav-link"><span class="nav-icon">📅</span><span class="nav-label">Daily Tracker</span></a>
+      <a href="/tasks"     class="nav-link"><span class="nav-icon">✅</span><span class="nav-label">Tasks</span></a>
+      <a href="/journal"   class="nav-link active"><span class="nav-icon">📓</span><span class="nav-label">Journal</span></a>
+      <a href="/workout"   class="nav-link"><span class="nav-icon">🏋️</span><span class="nav-label">Workout</span></a>
+      <a href="/finance"   class="nav-link"><span class="nav-icon">💰</span><span class="nav-label">Finance</span></a>
+      <a href="/documents" class="nav-link"><span class="nav-icon">📄</span><span class="nav-label">Documents</span></a>
+      <a href="/profile"   class="nav-link"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></a>
+    </nav>
+    <div style="flex:1"></div>
+    <button @click="logout()" class="nav-link danger"><span class="nav-icon">←</span><span class="nav-label">Sign out</span></button>
+  </aside>
+
+  <!-- Main -->
+  <main class="page-main">
+
+    <div class="page-header">
+      <h1 class="page-title">Journal</h1>
+      <button @click="openCreate()" class="btn btn-primary">+ New Entry</button>
+    </div>
+
+    <!-- ── Mood Trend Chart ─────────────────────────────────────────── -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title-block">
+          <h2>Mood Trends</h2>
+          <p>Your emotional patterns over time</p>
+        </div>
+        <div class="range-controls">
+          <button @click="setRange('7')"  :class="rangePreset==='7'  ? 'range-preset active' : 'range-preset'">7d</button>
+          <button @click="setRange('30')" :class="rangePreset==='30' ? 'range-preset active' : 'range-preset'">30d</button>
+          <button @click="setRange('90')" :class="rangePreset==='90' ? 'range-preset active' : 'range-preset'">90d</button>
+          <span class="range-sep">|</span>
+          <input type="date" x-model="startDate" @change="rangePreset='custom'" class="range-date" />
+          <span style="font-size:12px;color:#ABAAA5">→</span>
+          <input type="date" x-model="endDate"   @change="rangePreset='custom'" class="range-date" />
+          <button @click="loadEntries()" class="btn btn-secondary btn-sm">Apply</button>
+        </div>
+      </div>
+
+      <div class="chart-canvas-wrap">
+        <template x-if="entries.length === 0 && !loading">
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ABAAA5;font-size:13px">
+            No entries in this period
+          </div>
+        </template>
+        <canvas id="moodChart"></canvas>
+      </div>
+
+      <div class="mood-legend">
+        <template x-for="m in moods" :key="m.key">
+          <div class="legend-item">
+            <span class="legend-dot" :style="`background:${m.color}`"></span>
+            <span x-text="`${m.emoji} ${m.label}`"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── List toolbar ─────────────────────────────────────────────── -->
+    <div class="list-toolbar">
+      <div class="list-count">
+        <span x-text="filteredEntries.length"></span>
+        <span x-text="filteredEntries.length === 1 ? ' entry' : ' entries'"></span>
+        <template x-if="moodFilter">
+          <span> · filtered</span>
+        </template>
+      </div>
+      <button @click="moodFilter=''; page=1"
+              :class="moodFilter==='' ? 'mood-pill active' : 'mood-pill'">All</button>
+      <template x-for="m in moods" :key="m.key">
+        <button @click="moodFilter=m.key; page=1"
+                :class="moodFilter===m.key ? 'mood-pill active' : 'mood-pill'">
+          <span x-text="m.emoji"></span>
+          <span x-text="m.label"></span>
+        </button>
+      </template>
+    </div>
+
+    <!-- ── Entry list ───────────────────────────────────────────────── -->
+    <div x-show="loading" style="text-align:center;padding:40px;color:#ABAAA5;font-size:13px">
+      Loading…
+    </div>
+
+    <template x-if="!loading && filteredEntries.length === 0">
+      <div class="empty-state">
+        <div style="font-size:40px">📓</div>
+        <p>No journal entries found.</p>
+        <button @click="openCreate()" class="btn btn-primary" style="margin-top:14px">Write your first entry</button>
+      </div>
+    </template>
+
+    <template x-if="!loading && filteredEntries.length > 0">
+      <div>
+        <template x-for="entry in pagedEntries" :key="entry.id">
+          <div class="entry-row" @click="openEntry(entry)">
+
+            <!-- Date column -->
+            <div class="entry-date-col">
+              <div class="entry-date-day"  x-text="entryDay(entry.entry_date)"></div>
+              <div class="entry-date-mon"  x-text="entryMon(entry.entry_date)"></div>
+              <div class="entry-date-year" x-text="entryYear(entry.entry_date)"></div>
+            </div>
+
+            <div class="entry-divider"></div>
+
+            <!-- Body -->
+            <div class="entry-body">
+              <div class="entry-title" x-text="entryTitle(entry)"></div>
+              <template x-if="entry.title && entryPreview(entry)">
+                <div class="entry-preview" x-text="entryPreview(entry)"></div>
+              </template>
+              <div class="entry-meta">
+                <template x-if="entry.mood">
+                  <span class="mood-badge"
+                    :style="`background:${moodInfo(entry.mood).color}22; color:${moodInfo(entry.mood).color}`">
+                    <span x-text="moodInfo(entry.mood).emoji"></span>
+                    <span x-text="moodInfo(entry.mood).label"></span>
+                  </span>
+                </template>
+                <span class="src-badge" x-text="entry.source === 'telegram' ? '📱 Telegram' : '💻 Web'"></span>
+              </div>
+            </div>
+
+          </div>
+        </template>
+
+        <!-- Pagination -->
+        <template x-if="totalPages > 1">
+          <div class="pagination">
+            <button class="page-btn" :disabled="page===1" @click="setPage(page-1)">‹</button>
+
+            <span class="page-info" x-text="`${(page-1)*perPage+1}–${Math.min(page*perPage, filteredEntries.length)} of ${filteredEntries.length}`"></span>
+
+            <template x-for="p in pageNumbers" :key="p + '-' + page">
+              <template x-if="p === '…'">
+                <span class="page-ellipsis">…</span>
+              </template>
+              <template x-if="p !== '…'">
+                <button class="page-btn" :class="p===page ? 'active':''" @click="setPage(p)" x-text="p"></button>
+              </template>
+            </template>
+
+            <button class="page-btn" :disabled="page===totalPages" @click="setPage(page+1)">›</button>
+          </div>
+        </template>
+      </div>
+    </template>
+
+  </main>
+</div>
+
+<!-- ── Entry Modal ──────────────────────────────────────────────────── -->
+<div x-show="modal.open" x-cloak class="j-modal-overlay" @click.self="modal.open=false">
+  <div class="j-modal" @click.stop>
+
+    <!-- Header -->
+    <div class="j-modal-header">
+      <div class="j-modal-meta">
+        <template x-if="modal.mode === 'create'">
+          <div class="j-modal-date">New Entry</div>
+        </template>
+        <template x-if="modal.mode !== 'create'">
+          <div class="j-modal-date" x-text="modal.entry ? fmtEntryDate(modal.entry.entry_date) : ''"></div>
+        </template>
+        <div class="j-modal-submeta">
+          <template x-if="modal.mode === 'view' && modal.entry?.mood">
+            <span class="mood-badge"
+              :style="`background:${moodInfo(modal.entry.mood).color}22; color:${moodInfo(modal.entry.mood).color}`">
+              <span x-text="moodInfo(modal.entry.mood).emoji"></span>
+              <span x-text="moodInfo(modal.entry.mood).label"></span>
+            </span>
+          </template>
+          <template x-if="modal.mode === 'view' && modal.entry">
+            <span class="src-badge" x-text="modal.entry.source === 'telegram' ? '📱 Telegram' : '💻 Web'"></span>
+          </template>
+        </div>
+      </div>
+      <div class="j-modal-actions">
+        <template x-if="modal.mode === 'view'">
+          <button @click="startEdit()" class="btn btn-secondary btn-sm">✏️ Edit</button>
+        </template>
+        <template x-if="modal.mode === 'view'">
+          <button @click="deleteEntry(modal.entry.id)" class="btn btn-ghost btn-sm" style="color:#DC2626">🗑</button>
+        </template>
+        <button @click="modal.open=false" class="btn btn-ghost btn-sm">✕</button>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="j-modal-body">
+
+      <!-- View mode -->
+      <template x-if="modal.mode === 'view'">
+        <div>
+          <template x-if="modal.entry?.title">
+            <h3 style="font-size:17px;font-weight:600;margin:0 0 14px;color:#1A1917" x-text="modal.entry.title"></h3>
+          </template>
+          <div class="j-content-view" x-html="entryContentHtml(modal.entry)"></div>
+        </div>
+      </template>
+
+      <!-- Edit / Create mode -->
+      <template x-if="modal.mode === 'edit' || modal.mode === 'create'">
+        <div>
+          <template x-if="modal.mode === 'create'">
+            <div class="j-form-field">
+              <label>Date</label>
+              <input type="date" x-model="modal.form.entry_date" class="input" style="max-width:180px" />
+            </div>
+          </template>
+
+          <div class="j-form-field">
+            <label>Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#C8C7C2">(optional)</span></label>
+            <input x-model="modal.form.title" class="input" placeholder="Give this entry a title…" />
+          </div>
+
+          <div class="j-form-field">
+            <label>Mood</label>
+            <div class="mood-select-group">
+              <template x-for="m in moods" :key="m.key">
+                <button type="button"
+                  @click="modal.form.mood = m.key"
+                  :class="modal.form.mood === m.key ? 'mood-opt selected' : 'mood-opt'">
+                  <div x-text="m.emoji" style="font-size:18px;margin-bottom:2px"></div>
+                  <div x-text="m.label"></div>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <div class="j-form-field">
+            <label>Content</label>
+            <textarea x-model="modal.form.content" class="j-textarea"
+              placeholder="Write what's on your mind…" rows="8"></textarea>
+          </div>
+        </div>
+      </template>
+
+    </div>
+
+    <!-- Footer -->
+    <template x-if="modal.mode === 'edit' || modal.mode === 'create'">
+      <div class="j-modal-footer">
+        <button @click="cancelEdit()" class="btn btn-secondary">Cancel</button>
+        <button @click="saveEntry()" :disabled="modal.saving" class="btn btn-primary">
+          <span x-text="modal.saving ? 'Saving…' : (modal.mode === 'create' ? 'Save Entry' : 'Save Changes')"></span>
+        </button>
+      </div>
+    </template>
+
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+<script>
+let _moodChart = null;
+
+function journalApp() {
+  return {
+    username: '',
+    entries: [],
+    loading: false,
+
+    rangePreset: '30',
+    startDate: '',
+    endDate: '',
+
+    page: 1,
+    perPage: 10,
+    moodFilter: '',
+
+    modal: {
+      open: false,
+      mode: 'view',
+      entry: null,
+      saving: false,
+      form: { title: '', content: '', mood: 'neutral', entry_date: '' },
+    },
+
+    moods: [
+      { key: 'great',    label: 'Great',    emoji: '😊', score: 5, color: '#22c55e' },
+      { key: 'good',     label: 'Good',     emoji: '🙂', score: 4, color: '#3b82f6' },
+      { key: 'neutral',  label: 'Neutral',  emoji: '😐', score: 3, color: '#94a3b8' },
+      { key: 'low',      label: 'Low',      emoji: '😞', score: 2, color: '#fb923c' },
+      { key: 'stressed', label: 'Stressed', emoji: '😤', score: 1, color: '#ef4444' },
+    ],
+
+    // ── Computed ────────────────────────────────────────────────────
+    get filteredEntries() {
+      if (!this.moodFilter) return this.entries;
+      return this.entries.filter(e => e.mood === this.moodFilter);
+    },
+    get totalPages() {
+      return Math.ceil(this.filteredEntries.length / this.perPage) || 1;
+    },
+    get pagedEntries() {
+      const start = (this.page - 1) * this.perPage;
+      return this.filteredEntries.slice(start, start + this.perPage);
+    },
+    get pageNumbers() {
+      const total = this.totalPages;
+      const cur   = this.page;
+      if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+      const near = new Set([1, total, cur, cur - 1, cur + 1].filter(p => p >= 1 && p <= total));
+      const sorted = [...near].sort((a, b) => a - b);
+      const pages = [];
+      let prev = 0;
+      for (const p of sorted) {
+        if (prev && p - prev > 1) pages.push('…');
+        pages.push(p);
+        prev = p;
+      }
+      return pages;
+    },
+
+    // ── Helpers ─────────────────────────────────────────────────────
+    moodInfo(key) {
+      return this.moods.find(m => m.key === key) || { emoji: '—', label: '—', color: '#94a3b8', score: 0 };
+    },
+    entryDay(iso)  { return new Date(iso + 'T12:00:00').getDate(); },
+    entryMon(iso)  { return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' }); },
+    entryYear(iso) {
+      const y = new Date(iso + 'T12:00:00').getFullYear();
+      return y !== new Date().getFullYear() ? y : '';
+    },
+    fmtEntryDate(iso) {
+      return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    },
+    entryTitle(entry) {
+      return entry.title || this.entryPreview(entry) || '(no content)';
+    },
+    entryPreview(entry) {
+      const raw = entry.content || (entry.content_html || '').replace(/<[^>]*>/g, '');
+      return raw.length > 120 ? raw.slice(0, 120) + '…' : raw;
+    },
+    entryContentHtml(entry) {
+      if (!entry) return '';
+      if (entry.content_html) return entry.content_html;
+      if (entry.content) return entry.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+      return '<span style="color:#ABAAA5;font-style:italic">No content</span>';
+    },
+
+    // ── Init ────────────────────────────────────────────────────────
+    async init() {
+      requireAuth();
+      API.get('/users/me').then(u => { this.username = u.username || ''; }).catch(() => {});
+      this.setRange('30');
+      await this.loadEntries();
+      window._koko_cmds = [
+        { label: 'New Entry', icon: '✏️', hint: 'Journal', section: 'Actions', action: () => this.openCreate() },
+      ];
+    },
+
+    // ── Date range ──────────────────────────────────────────────────
+    setRange(preset) {
+      this.rangePreset = preset;
+      const today = new Date();
+      this.endDate = today.toISOString().slice(0, 10);
+      const days = preset === '7' ? 6 : preset === '30' ? 29 : 89;
+      const from = new Date(today);
+      from.setDate(from.getDate() - days);
+      this.startDate = from.toISOString().slice(0, 10);
+      if (preset !== 'custom') this.loadEntries();
+    },
+
+    // ── Data loading ─────────────────────────────────────────────────
+    async loadEntries() {
+      this.loading = true;
+      try {
+        const url = `/journal/?start_date=${this.startDate}&end_date=${this.endDate}`;
+        this.entries = await API.get(url);
+        this.page = 1;
+        this.$nextTick(() => this.renderChart());
+      } catch (e) {
+        showToast('Failed to load entries', 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // ── Chart ────────────────────────────────────────────────────────
+    renderChart() {
+      const canvas = document.getElementById('moodChart');
+      if (!canvas) return;
+      if (_moodChart) { _moodChart.destroy(); _moodChart = null; }
+      if (!this.entries.length) return;
+
+      // Best mood score per day (if multiple entries on same day)
+      const dayMap = {};
+      for (const e of this.entries) {
+        const info = this.moodInfo(e.mood);
+        if (!dayMap[e.entry_date] || info.score > dayMap[e.entry_date].score) {
+          dayMap[e.entry_date] = { score: info.score, mood: e.mood };
+        }
+      }
+
+      // Build full date axis
+      const labels = [];
+      const data   = [];
+      const ptBg   = [];
+      const ptR    = [];
+      const cur = new Date(this.startDate + 'T12:00:00');
+      const end = new Date(this.endDate   + 'T12:00:00');
+      while (cur <= end) {
+        const iso = cur.toISOString().slice(0, 10);
+        labels.push(iso);
+        const d = dayMap[iso];
+        data.push(d ? d.score : null);
+        ptBg.push(d ? this.moodInfo(d.mood).color : 'transparent');
+        ptR.push(d ? 5 : 0);
+        cur.setDate(cur.getDate() + 1);
+      }
+
+      const moodLookup = Object.fromEntries(this.moods.map(m => [m.score, m]));
+
+      _moodChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            borderColor: '#C8C7C2',
+            borderWidth: 1.5,
+            pointBackgroundColor: ptBg,
+            pointBorderColor: ptBg,
+            pointRadius: ptR,
+            pointHoverRadius: 7,
+            fill: false,
+            spanGaps: false,
+            tension: 0.35,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: ([item]) => new Date(item.label + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+                label: (item) => {
+                  if (item.raw === null) return 'No entry';
+                  const m = moodLookup[item.raw];
+                  return m ? `${m.emoji} ${m.label}` : '';
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: {
+                maxTicksLimit: 10,
+                callback: (_, i) => {
+                  const d = new Date(labels[i] + 'T12:00:00');
+                  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                },
+                font: { size: 11 },
+                color: '#ABAAA5',
+              },
+              grid: { display: false },
+            },
+            y: {
+              min: 0.5,
+              max: 5.5,
+              ticks: {
+                stepSize: 1,
+                callback: v => ({ 5: '😊', 4: '🙂', 3: '😐', 2: '😞', 1: '😤' }[v] || ''),
+                font: { size: 13 },
+                color: '#ABAAA5',
+              },
+              grid: { color: '#F6F5F2' },
+            },
+          },
+        },
+      });
+    },
+
+    // ── Modal actions ─────────────────────────────────────────────────
+    openCreate() {
+      this.modal = {
+        open: true,
+        mode: 'create',
+        entry: null,
+        saving: false,
+        form: {
+          title: '',
+          content: '',
+          mood: 'neutral',
+          entry_date: new Date().toISOString().slice(0, 10),
+        },
+      };
+    },
+
+    openEntry(entry) {
+      this.modal = {
+        open: true,
+        mode: 'view',
+        entry,
+        saving: false,
+        form: {
+          title: entry.title || '',
+          content: entry.content || '',
+          mood: entry.mood || 'neutral',
+          entry_date: entry.entry_date,
+        },
+      };
+    },
+
+    startEdit() {
+      this.modal.mode = 'edit';
+    },
+
+    cancelEdit() {
+      if (this.modal.entry) {
+        this.modal.mode = 'view';
+        this.modal.form = {
+          title: this.modal.entry.title || '',
+          content: this.modal.entry.content || '',
+          mood: this.modal.entry.mood || 'neutral',
+          entry_date: this.modal.entry.entry_date,
+        };
+      } else {
+        this.modal.open = false;
+      }
+    },
+
+    async saveEntry() {
+      const f = this.modal.form;
+      if (!f.content.trim() && !f.title.trim()) {
+        showToast('Please add a title or content', 'error');
+        return;
+      }
+      this.modal.saving = true;
+      const payload = {
+        title:        f.title.trim()   || null,
+        content:      f.content.trim() || null,
+        content_html: null,
+        mood:         f.mood           || null,
+      };
+      try {
+        if (this.modal.mode === 'create') {
+          await API.post('/journal/', { ...payload, entry_date: f.entry_date, source: 'web' });
+          showToast('Entry saved');
+        } else {
+          await API.patch(`/journal/${this.modal.entry.id}`, payload);
+          showToast('Entry updated');
+        }
+        this.modal.open = false;
+        await this.loadEntries();
+      } catch (e) {
+        showToast('Save failed: ' + e.message, 'error');
+      } finally {
+        this.modal.saving = false;
+      }
+    },
+
+    async deleteEntry(id) {
+      if (!confirm('Delete this entry? This cannot be undone.')) return;
+      try {
+        await API.delete(`/journal/${id}`);
+        this.modal.open = false;
+        showToast('Entry deleted');
+        await this.loadEntries();
+      } catch (e) {
+        showToast('Delete failed: ' + e.message, 'error');
+      }
+    },
+
+    // ── Pagination ────────────────────────────────────────────────────
+    setPage(p) {
+      this.page = Math.max(1, Math.min(p, this.totalPages));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    fmtDate, logout,
+  };
+}
+</script>
+</body>
+</html>
