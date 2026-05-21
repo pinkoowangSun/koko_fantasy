@@ -93,7 +93,7 @@ a JSON object with exactly these fields:
 
 ━━━ DOMAIN RULES ━━━
 - task     → to-do items, reminders, deadlines ("remind me to…", "add a task…")
-- journal  → diary entries, mood logs
+- journal  → diary entries, mood logs, personal notes ("note: …", "jot down …", "log that …", "record that …")
 - workout  → exercise sessions, fitness plans
 - memory   → persistent facts or preferences ("remember that I…", "I prefer…")
 - document → uploaded files, PDFs
@@ -195,7 +195,13 @@ Use generate+workout when asking to create or regenerate a weekly plan.
 Use update+workout when the user corrects or adjusts a logged session \
 ("actually it was 45 min", "that was 400 calories", "I did 4 sets not 3", \
 "update my squat weight to 80kg", "change today's calories to 350").
+━━━ JOURNAL TRIGGERS ━━━
+Use create+journal when the user starts with "note:", "note that", "jot down", "log that", \
+"record that", "diary:", or writes a personal reflection, thought, or feeling they want to save. \
+These are NOT tasks — they have no due date or action item. Examples: \
+"note: it's really your time to shine", "jot down I felt happy today", "diary: had a great meeting".
 Use list+journal when asking to see past journal entries or diary history.
+Use read+journal when asking about a specific past entry.
 
 Use current_time_utc and user_timezone from context to convert any local times to UTC.
 Always output valid JSON only. No markdown fences.\
