@@ -337,6 +337,7 @@ async def generate_plan(
     result = await generate_workout_plan(
         current_user.id, logs_context, user_memory, workout_pref,
         days_to_generate=days_to_generate if today_idx > 0 else None,
+        user_timezone=current_user.timezone or "UTC",
     )
 
     merged_plan = {**past_plan, **result.get("plan", {})}

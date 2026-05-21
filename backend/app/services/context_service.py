@@ -8,6 +8,7 @@ import asyncio
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,11 +22,28 @@ from app.models.task import Task
 from app.models.user import User
 from app.models.workout import WorkoutLog
 
+_UTC = ZoneInfo("UTC")
+
+
+def _local_date(user_timezone: str) -> date:
+    try:
+        return datetime.now(ZoneInfo(user_timezone or "UTC")).date()
+    except ZoneInfoNotFoundError:
+        return datetime.now(_UTC).date()
+
+
+def _to_local(dt: datetime, user_timezone: str) -> datetime:
+    """Convert a naive UTC datetime to an aware local datetime for display."""
+    try:
+        return dt.replace(tzinfo=_UTC).astimezone(ZoneInfo(user_timezone or "UTC"))
+    except ZoneInfoNotFoundError:
+        return dt.replace(tzinfo=_UTC)
+
 
 # ── Workout context (tiered temporal) ────────────────────────────────────────
 
-async def _fetch_workout_context(user_id: int, db: AsyncSession) -> str:
-    today = date.today()
+async def _fetch_workout_context(user_id: int, db: AsyncSession, user_timezone: str = "UTC") -> str:
+    today = _local_date(user_timezone)
     ninety_ago = today - timedelta(days=90)
 
     rows = (await db.execute(
@@ -107,7 +125,7 @@ async def _fetch_workout_context(user_id: int, db: AsyncSession) -> str:
 
 # ── Task context ──────────────────────────────────────────────────────────────
 
-async def _fetch_task_context(user_id: int, db: AsyncSession) -> str:
+async def _fetch_task_context(user_id: int, db: AsyncSession, user_timezone: str = "UTC") -> str:
     now = datetime.utcnow()
     seven_ago = now - timedelta(days=7)
     thirty_ago = now - timedelta(days=30)
@@ -141,10 +159,11 @@ async def _fetch_task_context(user_id: int, db: AsyncSession) -> str:
         for t in active:
             due_str = ""
             if t.due_date:
+                local_due = _to_local(t.due_date, user_timezone)
                 if t.due_date < now:
-                    due_str = f" ⚠ OVERDUE since {t.due_date.strftime('%b %d')}"
+                    due_str = f" ⚠ OVERDUE since {local_due.strftime('%b %d %Z')}"
                 else:
-                    due_str = f" — due {t.due_date.strftime('%b %d')}"
+                    due_str = f" — due {local_due.strftime('%b %d %Z')}"
             lines.append(f"- [{t.priority}] {t.title}{due_str}")
         if overdue:
             lines.insert(1, f"⚠ {len(overdue)} task(s) overdue")
@@ -155,7 +174,8 @@ async def _fetch_task_context(user_id: int, db: AsyncSession) -> str:
     if recently_done:
         lines = ["## Completed This Week"]
         for t in recently_done:
-            lines.append(f"- {t.title} (done {t.updated_at.strftime('%b %d')})")
+            local_done = _to_local(t.updated_at, user_timezone)
+            lines.append(f"- {t.title} (done {local_done.strftime('%b %d %Z')})")
         sections.append("\n".join(lines))
 
     sections.append(f"## Task Stats\nCompleted past 30 days: {done_30d}.")
@@ -165,8 +185,8 @@ async def _fetch_task_context(user_id: int, db: AsyncSession) -> str:
 
 # ── Journal context ───────────────────────────────────────────────────────────
 
-async def _fetch_journal_context(user_id: int, db: AsyncSession) -> str:
-    today = date.today()
+async def _fetch_journal_context(user_id: int, db: AsyncSession, user_timezone: str = "UTC") -> str:
+    today = _local_date(user_timezone)
     seven_ago = today - timedelta(days=7)
     thirty_ago = today - timedelta(days=30)
 
@@ -208,7 +228,7 @@ async def _fetch_journal_context(user_id: int, db: AsyncSession) -> str:
 
 # ── Reminder context ──────────────────────────────────────────────────────────
 
-async def _fetch_reminder_context(user_id: int, db: AsyncSession) -> str:
+async def _fetch_reminder_context(user_id: int, db: AsyncSession, user_timezone: str = "UTC") -> str:
     now = datetime.utcnow()
     seven_days = now + timedelta(days=7)
 
@@ -229,14 +249,15 @@ async def _fetch_reminder_context(user_id: int, db: AsyncSession) -> str:
 
     lines = [f"## Upcoming Reminders ({len(upcoming)})"]
     for r in upcoming:
-        lines.append(f"- {r.remind_at.strftime('%b %d at %H:%M UTC')}: {r.message}")
+        local_dt = _to_local(r.remind_at, user_timezone)
+        lines.append(f"- {local_dt.strftime('%b %d at %H:%M %Z')}: {r.message}")
     return "\n".join(lines)
 
 
 # ── Finance context ───────────────────────────────────────────────────────────
 
-async def _fetch_finance_context(user_id: int, db: AsyncSession) -> str:
-    today = date.today()
+async def _fetch_finance_context(user_id: int, db: AsyncSession, user_timezone: str = "UTC") -> str:
+    today = _local_date(user_timezone)
     thirty_ago = today - timedelta(days=30)
     month_start = today.replace(day=1)
 
@@ -299,21 +320,23 @@ async def _fetch_finance_context(user_id: int, db: AsyncSession) -> str:
 
 # ── Public builder ────────────────────────────────────────────────────────────
 
-async def build_rich_context(user_id: int, db: AsyncSession, scope: list[str]) -> str:
+async def build_rich_context(
+    user_id: int, db: AsyncSession, scope: list[str], user_timezone: str = "UTC"
+) -> str:
     """Fetch and format tiered live data for the given scope list."""
     fetch_all = "all" in scope
     tasks = []
 
     if fetch_all or "tasks" in scope:
-        tasks.append(_fetch_task_context(user_id, db))
+        tasks.append(_fetch_task_context(user_id, db, user_timezone))
     if fetch_all or "workouts" in scope:
-        tasks.append(_fetch_workout_context(user_id, db))
+        tasks.append(_fetch_workout_context(user_id, db, user_timezone))
     if fetch_all or "journals" in scope:
-        tasks.append(_fetch_journal_context(user_id, db))
+        tasks.append(_fetch_journal_context(user_id, db, user_timezone))
     if fetch_all or "reminders" in scope:
-        tasks.append(_fetch_reminder_context(user_id, db))
+        tasks.append(_fetch_reminder_context(user_id, db, user_timezone))
     if fetch_all or "finance" in scope:
-        tasks.append(_fetch_finance_context(user_id, db))
+        tasks.append(_fetch_finance_context(user_id, db, user_timezone))
 
     if not tasks:
         return ""
@@ -324,8 +347,8 @@ async def build_rich_context(user_id: int, db: AsyncSession, scope: list[str]) -
 
 # ── Profile summary (template-based, no LLM) ─────────────────────────────────
 
-async def _build_profile_summary(user_id: int, db: AsyncSession) -> str:
-    today = date.today()
+async def _build_profile_summary(user_id: int, db: AsyncSession, user_timezone: str = "UTC") -> str:
+    today = _local_date(user_timezone)
     now = datetime.utcnow()
     seven_ago_dt = now - timedelta(days=7)
     thirty_ago_d = today - timedelta(days=30)
@@ -454,7 +477,9 @@ async def refresh_profile_summary(user_id: int) -> None:
     """Rebuild and persist the profile summary. Runs as a background task."""
     async with AsyncSessionLocal() as db:
         try:
-            summary = await _build_profile_summary(user_id, db)
+            user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+            user_timezone = (user.timezone or "UTC") if user else "UTC"
+            summary = await _build_profile_summary(user_id, db, user_timezone)
             await db.execute(
                 update(User)
                 .where(User.id == user_id)

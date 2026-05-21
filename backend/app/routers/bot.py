@@ -590,7 +590,7 @@ async def _handle_generate_workout_plan(user: User, db: AsyncSession) -> dict:
     workout_pref = next((m.value for m in memory_items if m.key.strip().lower() == "workout"), "")
     user_memory = "; ".join(f"{m.key}: {m.value}" for m in memory_items if m.key.strip().lower() != "workout")
 
-    result = await generate_workout_plan(user.id, logs_context, user_memory, workout_pref)
+    result = await generate_workout_plan(user.id, logs_context, user_memory, workout_pref, user_timezone=user.timezone or "UTC")
 
     ws = today_local - timedelta(days=today_local.weekday())
     existing = (await db.execute(
@@ -647,7 +647,7 @@ async def _handle_generate_briefing(user: User, db: AsyncSession) -> dict:
     journal_txt = f"{len(entries)} entry(ies) today." if entries else "No journal entries today."
     reminders_txt = f"{len(reminders)} reminder(s) in next 24h." if reminders else "No upcoming reminders."
 
-    briefing = await generate_briefing(user.id, tasks_txt, journal_txt, reminders_txt)
+    briefing = await generate_briefing(user.id, tasks_txt, journal_txt, reminders_txt, user_timezone=user.timezone or "UTC")
     return {"response": briefing, "data": {}}
 
 
@@ -989,8 +989,10 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
         ctx_parts.append(f"\nUser Profile Summary:\n{user.profile_summary}")
     ctx = "; ".join(ctx_parts)
 
+    user_tz = user.timezone or "UTC"
+
     # Phase 1 — classify
-    phase1 = await classify_intent(user.id, body.message, ctx)
+    phase1 = await classify_intent(user.id, body.message, ctx, user_timezone=user_tz)
     action_cfg = ACTION_CONFIGS.get(phase1.action)
 
     if not action_cfg:
@@ -1015,12 +1017,13 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
         scope = [domain_cfg.scope_kw] if domain_cfg and domain_cfg.scope_kw else []
         if not scope:
             return {"action": "chat", "domain": phase1.domain, "response": phase1.response, "data": {}}
-        rich_ctx = await build_rich_context(user.id, db, scope)
+        rich_ctx = await build_rich_context(user.id, db, scope, user_timezone=user_tz)
         response = await generate_contextual_response(
             user_id=user.id,
             message=body.message,
             profile_summary=user.profile_summary or "",
             rich_context=rich_ctx,
+            user_timezone=user_tz,
         )
         return {"action": "chat", "domain": phase1.domain, "response": response, "data": {}}
 
@@ -1029,12 +1032,13 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
         if not phase1.context_scope:
             return {"action": "chat", "domain": "", "response": phase1.response, "data": {}}
 
-        rich_ctx = await build_rich_context(user.id, db, phase1.context_scope)
+        rich_ctx = await build_rich_context(user.id, db, phase1.context_scope, user_timezone=user_tz)
         response = await generate_contextual_response(
             user_id=user.id,
             message=body.message,
             profile_summary=user.profile_summary or "",
             rich_context=rich_ctx,
+            user_timezone=user_tz,
         )
         return {"action": "chat", "domain": "", "response": response, "data": {}}
 

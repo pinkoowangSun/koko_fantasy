@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError, model_validator
@@ -16,6 +17,24 @@ from app.services.intent_registry import (
     VALID_DOMAINS,
     VALID_SCOPES,
 )
+
+_UTC = ZoneInfo("UTC")
+
+
+def _datetime_block(user_timezone: str = "UTC") -> str:
+    """Return a markdown block with the user's current local date and time."""
+    try:
+        tz = ZoneInfo(user_timezone or "UTC")
+    except ZoneInfoNotFoundError:
+        tz = _UTC
+    now_local = datetime.now(tz)
+    now_utc = datetime.now(_UTC)
+    return (
+        "## Current Date & Time\n"
+        f"- **Local:** {now_local.strftime('%A, %B %d %Y %H:%M %Z')}\n"
+        f"- **Timezone:** {user_timezone or 'UTC'}\n"
+        f"- **UTC:** {now_utc.strftime('%Y-%m-%dT%H:%M:%S+00:00')}"
+    )
 
 _client = AsyncOpenAI(
     api_key=settings.DEEPSEEK_API_KEY,
@@ -81,13 +100,15 @@ async def _save_messages(user_id: int, user_msg: str, assistant_msg: str, source
 
 # ── Phase 1: classify intent ──────────────────────────────────────────────────
 
-async def classify_intent(user_id: int, message: str, user_context: str = "") -> Phase1Response:
+async def classify_intent(
+    user_id: int, message: str, user_context: str = "", user_timezone: str = "UTC"
+) -> Phase1Response:
     """
     Phase 1 LLM call: classify action + domain + context_scope.
     Validates output with Pydantic; retries once on failure; falls back to safe default.
     """
     history = await _get_recent_history(user_id, limit=6)
-    system = INTENT_SYSTEM_PROMPT
+    system = INTENT_SYSTEM_PROMPT + "\n\n" + _datetime_block(user_timezone)
     if user_context:
         system += f"\n\nUser context: {user_context}"
 
@@ -151,6 +172,7 @@ async def generate_contextual_response(
     message: str,
     profile_summary: str,
     rich_context: str,
+    user_timezone: str = "UTC",
 ) -> str:
     """
     Phase 2 LLM call: generate a rich, data-aware conversational response.
@@ -158,7 +180,7 @@ async def generate_contextual_response(
     """
     history = await _get_recent_history(user_id, limit=10)
 
-    context_block = ""
+    context_block = _datetime_block(user_timezone) + "\n\n"
     if profile_summary:
         context_block += f"## User Profile Summary\n{profile_summary}\n\n"
     if rich_context:
@@ -189,7 +211,11 @@ async def generate_contextual_response(
 # ── Briefing (unchanged) ──────────────────────────────────────────────────────
 
 async def generate_briefing(
-    user_id: int, tasks_summary: str, journal_summary: str, reminders_summary: str
+    user_id: int,
+    tasks_summary: str,
+    journal_summary: str,
+    reminders_summary: str,
+    user_timezone: str = "UTC",
 ) -> str:
     prompt = (
         f"Generate a concise, friendly daily briefing.\n\n"
@@ -198,10 +224,11 @@ async def generate_briefing(
         f"Upcoming reminders:\n{reminders_summary}\n\n"
         "Keep it motivating and well-structured with clear sections."
     )
+    system = "You are Koko, a personal assistant. Generate daily briefings.\n\n" + _datetime_block(user_timezone)
     resp = await _client.chat.completions.create(
         model=settings.DEEPSEEK_MODEL,
         messages=[
-            {"role": "system", "content": "You are Koko, a personal assistant. Generate daily briefings."},
+            {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
         temperature=0.6,
@@ -307,13 +334,15 @@ Rules:
 
 # ── Finance helpers ───────────────────────────────────────────────────────────
 
-async def parse_finance_transaction(user_id: int, text: str) -> dict:
+async def parse_finance_transaction(user_id: int, text: str, user_timezone: str = "UTC") -> dict:
     """
     Extract structured transaction data from free text.
     Returns dict with: amount, transaction_type, category, currency, description, transaction_date
     """
-    from datetime import date as _date
-    today = _date.today().isoformat()
+    try:
+        today = datetime.now(ZoneInfo(user_timezone or "UTC")).date().isoformat()
+    except ZoneInfoNotFoundError:
+        today = datetime.now(_UTC).date().isoformat()
     prompt = (
         f'Today is {today}. Extract a financial transaction from this text and return JSON:\n'
         '{{\n'
@@ -351,13 +380,15 @@ async def parse_finance_transaction(user_id: int, text: str) -> dict:
         }
 
 
-async def parse_finance_goal(user_id: int, text: str) -> dict:
+async def parse_finance_goal(user_id: int, text: str, user_timezone: str = "UTC") -> dict:
     """
     Extract a finance goal from free text.
     Returns dict with: title, goal_type, term, target_amount, currency, deadline, record_type
     """
-    from datetime import date as _date
-    today = _date.today().isoformat()
+    try:
+        today = datetime.now(ZoneInfo(user_timezone or "UTC")).date().isoformat()
+    except ZoneInfoNotFoundError:
+        today = datetime.now(_UTC).date().isoformat()
     prompt = (
         f'Today is {today}. Extract a financial goal from this text and return JSON:\n'
         '{{\n'
@@ -459,8 +490,12 @@ async def generate_workout_plan(
     user_memory: str = "",
     workout_preference: str = "",
     days_to_generate: list[str] | None = None,
+    user_timezone: str = "UTC",
 ) -> dict:
-    today_name = datetime.now().strftime("%A")
+    try:
+        today_name = datetime.now(ZoneInfo(user_timezone or "UTC")).strftime("%A")
+    except ZoneInfoNotFoundError:
+        today_name = datetime.now(_UTC).strftime("%A")
     history_block = logs_context.strip() or "No workout history yet — design a well-rounded beginner-friendly starter plan."
     memory_block = user_memory.strip() or "No additional profile data."
     pref_block = (

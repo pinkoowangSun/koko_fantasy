@@ -70,11 +70,22 @@ async def get_briefing(
     def fmt_reminders():
         if not reminders:
             return "No reminders in the next 24 hours."
-        lines = [f"  - {r.message} at {r.remind_at.strftime('%H:%M UTC')}" for r in reminders[:5]]
+        try:
+            tz = ZoneInfo(current_user.timezone or "UTC")
+        except ZoneInfoNotFoundError:
+            tz = ZoneInfo("UTC")
+        lines = [
+            f"  - {r.message} at {r.remind_at.replace(tzinfo=ZoneInfo('UTC')).astimezone(tz).strftime('%H:%M %Z')}"
+            for r in reminders[:5]
+        ]
         return f"{len(reminders)} reminder(s):\n" + "\n".join(lines)
 
     briefing_text = await generate_briefing(
-        current_user.id, fmt_tasks(), fmt_journal(), fmt_reminders()
+        current_user.id,
+        fmt_tasks(),
+        fmt_journal(),
+        fmt_reminders(),
+        user_timezone=current_user.timezone or "UTC",
     )
     return {
         "briefing": briefing_text,
