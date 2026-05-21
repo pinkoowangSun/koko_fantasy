@@ -662,11 +662,14 @@ function journalApp() {
     setRange(preset) {
       this.rangePreset = preset;
       const today = new Date();
-      this.endDate = today.toISOString().slice(0, 10);
+      const todayStr = today.toISOString().slice(0, 10);
       const days = preset === '7' ? 6 : preset === '30' ? 29 : 89;
       const from = new Date(today);
       from.setDate(from.getDate() - days);
       this.startDate = from.toISOString().slice(0, 10);
+      // endDate is kept as today for the date input display only;
+      // preset loads omit end_date so future entries are included
+      this.endDate = todayStr;
       if (preset !== 'custom') this.loadEntries();
     },
 
@@ -674,7 +677,10 @@ function journalApp() {
     async loadEntries() {
       this.loading = true;
       try {
-        const url = `/journal/?start_date=${this.startDate}&end_date=${this.endDate}`;
+        // Presets: no end_date filter → future entries are included.
+        // Custom: respect whatever the user set as the end date.
+        let url = `/journal/?start_date=${this.startDate}`;
+        if (this.rangePreset === 'custom' && this.endDate) url += `&end_date=${this.endDate}`;
         this.entries = await API.get(url);
         this.page = 1;
         this.$nextTick(() => this.renderChart());
@@ -701,13 +707,18 @@ function journalApp() {
         }
       }
 
-      // Build full date axis
+      // Build full date axis: extend to whichever is later — today or the
+      // most recent entry (handles future-dated entries automatically).
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const maxEntry = this.entries.reduce((m, e) => e.entry_date > m ? e.entry_date : m, todayStr);
+      const axisEnd  = maxEntry > this.endDate ? maxEntry : (this.endDate || todayStr);
+
       const labels = [];
       const data   = [];
       const ptBg   = [];
       const ptR    = [];
       const cur = new Date(this.startDate + 'T12:00:00');
-      const end = new Date(this.endDate   + 'T12:00:00');
+      const end = new Date(axisEnd        + 'T12:00:00');
       while (cur <= end) {
         const iso = cur.toISOString().slice(0, 10);
         labels.push(iso);
