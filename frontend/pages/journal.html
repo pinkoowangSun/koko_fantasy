@@ -325,6 +325,31 @@
       <button @click="openCreate()" class="btn btn-primary">+ New Entry</button>
     </div>
 
+    <!-- ── Quick Mood Check-in ─────────────────────────────────────── -->
+    <div style="background:#fff;border:1px solid #E8E7E3;border-radius:14px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:13px;font-weight:600;color:#1A1917;margin-bottom:1px">How are you feeling today?</div>
+        <div style="font-size:11.5px;color:#ABAAA5" x-text="todayMood ? (todayMood.fromJournal ? 'Set by journal entry — edit entry to change' : 'Tap same mood to clear') : 'No check-in yet'"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <template x-for="m in moods" :key="m.key">
+          <button
+            @click="setTodayMood(m.key)"
+            :disabled="settingMood || (todayMood && todayMood.fromJournal)"
+            :title="m.label"
+            :style="`
+              width:46px;height:46px;border-radius:12px;border:2px solid;
+              font-size:22px;cursor:pointer;transition:all .12s;
+              border-color:${todayMood && todayMood.mood === m.key ? m.color : '#E8E7E3'};
+              background:${todayMood && todayMood.mood === m.key ? m.color + '22' : '#fff'};
+              opacity:${settingMood ? '.5' : '1'};
+            `">
+            <span x-text="m.emoji"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+
     <!-- ── Mood Trend Chart ─────────────────────────────────────────── -->
     <div class="chart-card">
       <div class="chart-header">
@@ -509,20 +534,9 @@
       <!-- Edit / Create mode -->
       <template x-if="modal.mode === 'edit' || modal.mode === 'create'">
         <div>
-          <template x-if="modal.mode === 'create'">
-            <div class="j-form-field">
-              <label>Date</label>
-              <input type="date" x-model="modal.form.entry_date" class="input" style="max-width:180px" />
-            </div>
-          </template>
-
+          <!-- Mood — first and required -->
           <div class="j-form-field">
-            <label>Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#C8C7C2">(optional)</span></label>
-            <input x-model="modal.form.title" class="input" placeholder="Give this entry a title…" />
-          </div>
-
-          <div class="j-form-field">
-            <label>Mood</label>
+            <label>Mood <span style="color:#ef4444;font-weight:600;text-transform:none;letter-spacing:0">*</span></label>
             <div class="mood-select-group">
               <template x-for="m in moods" :key="m.key">
                 <button type="button"
@@ -533,12 +547,30 @@
                 </button>
               </template>
             </div>
+            <template x-if="!modal.form.mood">
+              <p style="font-size:11.5px;color:#fb923c;margin:5px 0 0">Select a mood to continue</p>
+            </template>
           </div>
 
+          <!-- Date (create only) -->
+          <template x-if="modal.mode === 'create'">
+            <div class="j-form-field">
+              <label>Date</label>
+              <input type="date" x-model="modal.form.entry_date" class="input" style="max-width:180px" />
+            </div>
+          </template>
+
+          <!-- Title -->
           <div class="j-form-field">
-            <label>Content</label>
+            <label>Title <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#C8C7C2">(optional)</span></label>
+            <input x-model="modal.form.title" class="input" placeholder="Give this entry a title…" />
+          </div>
+
+          <!-- Content -->
+          <div class="j-form-field">
+            <label>Content <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#C8C7C2">(optional)</span></label>
             <textarea x-model="modal.form.content" class="j-textarea"
-              placeholder="Write what's on your mind…" rows="8"></textarea>
+              placeholder="Write what's on your mind…" rows="7"></textarea>
           </div>
         </div>
       </template>
@@ -576,12 +608,17 @@ function journalApp() {
     perPage: 10,
     moodFilter: '',
 
+    // Today's quick mood check-in state
+    todayStr: new Date().toISOString().slice(0, 10),
+    todayMoodEntry: null,   // the mood-only entry for today (if any)
+    settingMood: false,
+
     modal: {
       open: false,
       mode: 'view',
       entry: null,
       saving: false,
-      form: { title: '', content: '', mood: 'neutral', entry_date: '' },
+      form: { title: '', content: '', mood: '', entry_date: '' },
     },
 
     moods: [
@@ -593,9 +630,12 @@ function journalApp() {
     ],
 
     // ── Computed ────────────────────────────────────────────────────
+    isMoodOnly(e) { return !e.title && !e.content && !e.content_html; },
+    get journalEntries() { return this.entries.filter(e => !this.isMoodOnly(e)); },
     get filteredEntries() {
-      if (!this.moodFilter) return this.entries;
-      return this.entries.filter(e => e.mood === this.moodFilter);
+      const base = this.journalEntries;
+      if (!this.moodFilter) return base;
+      return base.filter(e => e.mood === this.moodFilter);
     },
     get totalPages() {
       return Math.ceil(this.filteredEntries.length / this.perPage) || 1;
@@ -658,6 +698,56 @@ function journalApp() {
       ];
     },
 
+    // ── Today mood helpers ───────────────────────────────────────────
+    // Returns the effective mood for today: journal entry mood > mood-only entry
+    get todayMood() {
+      const todayEntries = this.entries.filter(e => e.entry_date === this.todayStr);
+      // Prefer mood from a content-bearing journal entry
+      const journalWithMood = todayEntries.find(e => !this.isMoodOnly(e) && e.mood);
+      if (journalWithMood) return { mood: journalWithMood.mood, fromJournal: true };
+      // Fall back to mood-only check-in
+      if (this.todayMoodEntry) return { mood: this.todayMoodEntry.mood, fromJournal: false };
+      return null;
+    },
+
+    syncTodayMoodEntry() {
+      this.todayMoodEntry = this.entries.find(
+        e => e.entry_date === this.todayStr && this.isMoodOnly(e)
+      ) || null;
+    },
+
+    async setTodayMood(key) {
+      // If clicking the currently active stand-alone check-in, clear it
+      const current = this.todayMood;
+      if (current && !current.fromJournal && current.mood === key) {
+        if (!confirm('Clear today\'s mood check-in?')) return;
+        this.settingMood = true;
+        try {
+          await API.delete(`/journal/${this.todayMoodEntry.id}`);
+          await this.loadEntries();
+        } catch (e) { showToast('Failed to clear mood', 'error'); }
+        finally { this.settingMood = false; }
+        return;
+      }
+      // If today already has a journal entry with mood, don't override it
+      if (current && current.fromJournal) {
+        showToast('Today\'s mood is set by a journal entry — edit that entry to change it', 'error');
+        return;
+      }
+      this.settingMood = true;
+      try {
+        if (this.todayMoodEntry) {
+          // Update existing mood-only entry
+          await API.patch(`/journal/${this.todayMoodEntry.id}`, { mood: key });
+        } else {
+          // Create new mood-only entry
+          await API.post('/journal/', { entry_date: this.todayStr, mood: key, source: 'web' });
+        }
+        await this.loadEntries();
+      } catch (e) { showToast('Failed to save mood', 'error'); }
+      finally { this.settingMood = false; }
+    },
+
     // ── Date range ──────────────────────────────────────────────────
     setRange(preset) {
       this.rangePreset = preset;
@@ -682,6 +772,7 @@ function journalApp() {
         let url = `/journal/?start_date=${this.startDate}`;
         if (this.rangePreset === 'custom' && this.endDate) url += `&end_date=${this.endDate}`;
         this.entries = await API.get(url);
+        this.syncTodayMoodEntry();
         this.page = 1;
         this.$nextTick(() => this.renderChart());
       } catch (e) {
@@ -803,7 +894,7 @@ function journalApp() {
         form: {
           title: '',
           content: '',
-          mood: 'neutral',
+          mood: '',
           entry_date: new Date().toISOString().slice(0, 10),
         },
       };
@@ -818,7 +909,7 @@ function journalApp() {
         form: {
           title: entry.title || '',
           content: entry.content || '',
-          mood: entry.mood || 'neutral',
+          mood: entry.mood || '',
           entry_date: entry.entry_date,
         },
       };
@@ -834,7 +925,7 @@ function journalApp() {
         this.modal.form = {
           title: this.modal.entry.title || '',
           content: this.modal.entry.content || '',
-          mood: this.modal.entry.mood || 'neutral',
+          mood: this.modal.entry.mood || '',
           entry_date: this.modal.entry.entry_date,
         };
       } else {
@@ -844,8 +935,8 @@ function journalApp() {
 
     async saveEntry() {
       const f = this.modal.form;
-      if (!f.content.trim() && !f.title.trim()) {
-        showToast('Please add a title or content', 'error');
+      if (!f.mood) {
+        showToast('Please select a mood', 'error');
         return;
       }
       this.modal.saving = true;
