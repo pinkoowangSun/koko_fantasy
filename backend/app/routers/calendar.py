@@ -403,9 +403,7 @@ async def get_holidays(
                         "title": f"🎉 {name}",
                         "start": h["date"],
                         "allDay": True,
-                        "backgroundColor": "#fef9c3",
-                        "borderColor": "#fbbf24",
-                        "textColor": "#92400e",
+                        "classNames": ["fc-holiday-event"],
                         "extendedProps": {"type": "holiday", "globalName": h.get("name", "")},
                     })
             except Exception:

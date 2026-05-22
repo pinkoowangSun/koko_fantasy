@@ -22,6 +22,8 @@
     .fc-daygrid-day-number { font-size: 12.5px; color: #1A1917; }
     .fc-event { border-radius: 4px !important; border: none !important; font-size: 11px !important; }
     .fc-toolbar.fc-header-toolbar { margin-bottom: 16px !important; }
+    .fc-holiday-event.fc-event { background: #fde68a !important; color: #78350f !important; font-weight: 500 !important; }
+    .fc-daygrid-day-frame { min-height: unset !important; }
   </style>
 </head>
 <body x-data="dashboardApp()" x-init="init()">
@@ -534,6 +536,7 @@
         this.calendarObj = new FullCalendar.Calendar(document.getElementById('calendar'), {
           initialView: 'dayGridMonth',
           height: 'auto',
+          dayMaxEvents: true,
           headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek' },
           eventSources: [
             {
