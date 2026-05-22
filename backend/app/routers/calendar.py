@@ -2,6 +2,7 @@ from datetime import date, datetime, time as time_
 from typing import List
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import httpx
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, or_, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -298,3 +299,116 @@ async def get_today_summary(
             ],
         },
     }
+
+
+# ── IANA timezone → ISO 3166-1 alpha-2 country code ──────────────────────────
+_TZ_COUNTRY: dict[str, str] = {
+    # Asia
+    "Asia/Singapore": "SG", "Asia/Shanghai": "CN", "Asia/Beijing": "CN",
+    "Asia/Chongqing": "CN", "Asia/Harbin": "CN", "Asia/Kashgar": "CN",
+    "Asia/Urumqi": "CN", "Asia/Hong_Kong": "HK", "Asia/Macau": "MO",
+    "Asia/Tokyo": "JP", "Asia/Seoul": "KR", "Asia/Kolkata": "IN",
+    "Asia/Calcutta": "IN", "Asia/Taipei": "TW", "Asia/Bangkok": "TH",
+    "Asia/Jakarta": "ID", "Asia/Makassar": "ID", "Asia/Jayapura": "ID",
+    "Asia/Manila": "PH", "Asia/Kuala_Lumpur": "MY", "Asia/Kuching": "MY",
+    "Asia/Ho_Chi_Minh": "VN", "Asia/Saigon": "VN", "Asia/Hanoi": "VN",
+    "Asia/Dubai": "AE", "Asia/Riyadh": "SA", "Asia/Karachi": "PK",
+    "Asia/Dhaka": "BD", "Asia/Colombo": "LK", "Asia/Kathmandu": "NP",
+    "Asia/Katmandu": "NP", "Asia/Kabul": "AF", "Asia/Tehran": "IR",
+    "Asia/Baghdad": "IQ", "Asia/Jerusalem": "IL", "Asia/Beirut": "LB",
+    "Asia/Amman": "JO", "Asia/Damascus": "SY", "Asia/Muscat": "OM",
+    "Asia/Bahrain": "BH", "Asia/Qatar": "QA", "Asia/Kuwait": "KW",
+    "Asia/Yerevan": "AM", "Asia/Tbilisi": "GE", "Asia/Baku": "AZ",
+    "Asia/Tashkent": "UZ", "Asia/Almaty": "KZ", "Asia/Ulaanbaatar": "MN",
+    "Asia/Rangoon": "MM", "Asia/Yangon": "MM", "Asia/Phnom_Penh": "KH",
+    "Asia/Vientiane": "LA", "Asia/Brunei": "BN", "Asia/Dili": "TL",
+    "Asia/Novosibirsk": "RU", "Asia/Vladivostok": "RU", "Asia/Yakutsk": "RU",
+    "Asia/Irkutsk": "RU", "Asia/Krasnoyarsk": "RU", "Asia/Yekaterinburg": "RU",
+    # Europe
+    "Europe/London": "GB", "Europe/Dublin": "IE", "Europe/Berlin": "DE",
+    "Europe/Paris": "FR", "Europe/Madrid": "ES", "Europe/Rome": "IT",
+    "Europe/Amsterdam": "NL", "Europe/Brussels": "BE", "Europe/Zurich": "CH",
+    "Europe/Vienna": "AT", "Europe/Stockholm": "SE", "Europe/Oslo": "NO",
+    "Europe/Copenhagen": "DK", "Europe/Helsinki": "FI", "Europe/Warsaw": "PL",
+    "Europe/Prague": "CZ", "Europe/Bratislava": "SK", "Europe/Budapest": "HU",
+    "Europe/Bucharest": "RO", "Europe/Sofia": "BG", "Europe/Kiev": "UA",
+    "Europe/Kyiv": "UA", "Europe/Moscow": "RU", "Europe/Samara": "RU",
+    "Europe/Athens": "GR", "Europe/Istanbul": "TR", "Europe/Lisbon": "PT",
+    "Europe/Riga": "LV", "Europe/Tallinn": "EE", "Europe/Vilnius": "LT",
+    "Europe/Minsk": "BY", "Europe/Belgrade": "RS", "Europe/Zagreb": "HR",
+    "Europe/Ljubljana": "SI", "Europe/Luxembourg": "LU", "Europe/Malta": "MT",
+    "Europe/Reykjavik": "IS", "Atlantic/Reykjavik": "IS",
+    # Americas
+    "America/New_York": "US", "America/Chicago": "US", "America/Denver": "US",
+    "America/Los_Angeles": "US", "America/Phoenix": "US", "America/Anchorage": "US",
+    "America/Honolulu": "US", "America/Detroit": "US",
+    "America/Indiana/Indianapolis": "US", "America/Kentucky/Louisville": "US",
+    "America/Toronto": "CA", "America/Vancouver": "CA", "America/Montreal": "CA",
+    "America/Winnipeg": "CA", "America/Edmonton": "CA", "America/Halifax": "CA",
+    "America/St_Johns": "CA", "America/Sao_Paulo": "BR", "America/Manaus": "BR",
+    "America/Fortaleza": "BR", "America/Recife": "BR", "America/Belem": "BR",
+    "America/Mexico_City": "MX", "America/Monterrey": "MX", "America/Tijuana": "MX",
+    "America/Buenos_Aires": "AR", "America/Argentina/Buenos_Aires": "AR",
+    "America/Argentina/Cordoba": "AR", "America/Santiago": "CL",
+    "America/Bogota": "CO", "America/Lima": "PE", "America/Caracas": "VE",
+    "America/La_Paz": "BO", "America/Asuncion": "PY", "America/Montevideo": "UY",
+    "America/Guayaquil": "EC", "America/Panama": "PA", "America/Costa_Rica": "CR",
+    "America/Guatemala": "GT", "America/Santo_Domingo": "DO", "America/Havana": "CU",
+    "America/Jamaica": "JM",
+    # Oceania
+    "Australia/Sydney": "AU", "Australia/Melbourne": "AU", "Australia/Brisbane": "AU",
+    "Australia/Perth": "AU", "Australia/Adelaide": "AU", "Australia/Darwin": "AU",
+    "Australia/Hobart": "AU", "Pacific/Auckland": "NZ", "Pacific/Fiji": "FJ",
+    "Pacific/Honolulu": "US", "Pacific/Port_Moresby": "PG",
+    # Africa
+    "Africa/Cairo": "EG", "Africa/Johannesburg": "ZA", "Africa/Lagos": "NG",
+    "Africa/Nairobi": "KE", "Africa/Casablanca": "MA", "Africa/Algiers": "DZ",
+    "Africa/Tunis": "TN", "Africa/Tripoli": "LY", "Africa/Khartoum": "SD",
+    "Africa/Addis_Ababa": "ET", "Africa/Dar_es_Salaam": "TZ",
+    "Africa/Kampala": "UG", "Africa/Harare": "ZW", "Africa/Lusaka": "ZM",
+    "Africa/Accra": "GH", "Africa/Abidjan": "CI", "Africa/Dakar": "SN",
+    "Africa/Kinshasa": "CD", "Africa/Luanda": "AO", "Africa/Windhoek": "NA",
+}
+
+
+@router.get("/holidays")
+async def get_holidays(
+    start: date = Query(...),
+    end: date = Query(...),
+    current_user: User = Depends(require_approved),
+):
+    country_code = _TZ_COUNTRY.get(current_user.timezone or "UTC")
+    if not country_code:
+        return []
+
+    years = set(range(start.year, end.year + 1))
+    events: List[dict] = []
+
+    async with httpx.AsyncClient(timeout=6.0) as client:
+        for year in years:
+            try:
+                resp = await client.get(
+                    f"https://date.nager.at/api/v3/PublicHolidays/{year}/{country_code}",
+                    headers={"Accept": "application/json"},
+                )
+                if resp.status_code != 200:
+                    continue
+                for h in resp.json():
+                    hdate = date.fromisoformat(h["date"])
+                    if hdate < start or hdate > end:
+                        continue
+                    name = h.get("localName") or h.get("name", "Holiday")
+                    events.append({
+                        "id": f"holiday-{h['date']}-{country_code}",
+                        "title": f"🎉 {name}",
+                        "start": h["date"],
+                        "allDay": True,
+                        "backgroundColor": "#fef9c3",
+                        "borderColor": "#fbbf24",
+                        "textColor": "#92400e",
+                        "extendedProps": {"type": "holiday", "globalName": h.get("name", "")},
+                    })
+            except Exception:
+                continue
+
+    return events
