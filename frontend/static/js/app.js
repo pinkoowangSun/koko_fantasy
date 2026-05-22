@@ -314,7 +314,7 @@ function initNavOrder() {
       const a = document.createElement('a');
       a.href = href;
       a.className = 'nav-link' + (location.pathname === href ? ' active' : '');
-      a.innerHTML = `<span class="nav-icon">${item.icon}</span><span class="nav-label">${item.label}</span>`;
+      a.innerHTML = `<span class="nav-icon">${item.icon}</span><span class="nav-label">${item.label}</span><span class="nav-drag-handle" title="Drag to reorder"><svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor"><rect y="0" width="10" height="1.5" rx=".75"/><rect y="3.75" width="10" height="1.5" rx=".75"/><rect y="7.5" width="10" height="1.5" rx=".75"/></svg></span>`;
       a.draggable = true;
       a.dataset.navHref = href;
 

@@ -75,9 +75,21 @@ body {
   text-align: left;
   line-height: 1;
 }
-.nav-link[draggable="true"] { cursor: grab; }
 .nav-link--dragging { opacity: 0.35; cursor: grabbing !important; }
 .nav-link--drop-target { border-top-color: #1A1917 !important; }
+.nav-drag-handle {
+  margin-left: auto;
+  padding-left: 6px;
+  color: #C8C7C2;
+  opacity: 0;
+  transition: opacity 0.12s;
+  cursor: grab;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.nav-link:hover .nav-drag-handle { opacity: 1; }
+.sidebar--collapsed .nav-drag-handle { display: none; }
 .nav-link .nav-icon {
   flex-shrink: 0;
   width: 20px;
