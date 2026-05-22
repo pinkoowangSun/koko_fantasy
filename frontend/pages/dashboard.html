@@ -68,6 +68,9 @@
       <span style="display:flex;align-items:center;gap:5px">
         <span style="width:8px;height:8px;border-radius:50%;background:#F59E0B;display:inline-block"></span> Documents
       </span>
+      <span style="display:flex;align-items:center;gap:5px">
+        <span style="width:8px;height:8px;border-radius:4px;background:#fde68a;border:1px solid #fbbf24;display:inline-block"></span> Holidays
+      </span>
     </div>
 
   </main>
@@ -536,7 +539,7 @@
         this.calendarObj = new FullCalendar.Calendar(document.getElementById('calendar'), {
           initialView: 'dayGridMonth',
           height: 'auto',
-          dayMaxEvents: true,
+          dayMaxEvents: 3,
           headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek' },
           eventSources: [
             {
