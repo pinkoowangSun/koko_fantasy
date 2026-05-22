@@ -266,6 +266,97 @@ async function apiFetch(path, opts = {}) {
   return resp.json();
 }
 
+// ── Dynamic sidebar nav with drag-to-reorder ──────────────────────────────────
+const NAV_ITEMS = [
+  { href: '/dashboard', icon: '📅', label: 'Daily Tracker' },
+  { href: '/tasks',     icon: '✅', label: 'Tasks' },
+  { href: '/journal',   icon: '📓', label: 'Journal' },
+  { href: '/workout',   icon: '🏋️', label: 'Workout' },
+  { href: '/finance',   icon: '💰', label: 'Finance' },
+  { href: '/documents', icon: '📄', label: 'Documents' },
+  { href: '/profile',   icon: '👤', label: 'Profile' },
+];
+
+function getNavOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('koko_nav_order') || 'null');
+    if (!Array.isArray(saved)) return NAV_ITEMS.map(n => n.href);
+    const known   = new Set(NAV_ITEMS.map(n => n.href));
+    const ordered = saved.filter(h => known.has(h));
+    const missing = NAV_ITEMS.map(n => n.href).filter(h => !ordered.includes(h));
+    return [...ordered, ...missing];
+  } catch { return NAV_ITEMS.map(n => n.href); }
+}
+
+function initNavOrder() {
+  const nav = document.querySelector('.sidebar nav');
+  if (!nav) return;
+
+  const byHref = Object.fromEntries(NAV_ITEMS.map(n => [n.href, n]));
+  let order = getNavOrder();
+  let dragSrc = null;
+
+  function appendAdminLink() {
+    if (!window._koko_is_admin) return;
+    if (nav.querySelector('[href="/users"]')) return;
+    const a = document.createElement('a');
+    a.href = '/users';
+    a.className = 'nav-link' + (location.pathname === '/users' ? ' active' : '');
+    a.innerHTML = '<span class="nav-icon">🛡️</span><span class="nav-label">Users</span>';
+    nav.appendChild(a);
+  }
+
+  function render() {
+    nav.innerHTML = '';
+    order.forEach((href, idx) => {
+      const item = byHref[href];
+      if (!item) return;
+      const a = document.createElement('a');
+      a.href = href;
+      a.className = 'nav-link' + (location.pathname === href ? ' active' : '');
+      a.innerHTML = `<span class="nav-icon">${item.icon}</span><span class="nav-label">${item.label}</span>`;
+      a.draggable = true;
+      a.dataset.navHref = href;
+
+      a.addEventListener('dragstart', e => {
+        dragSrc = idx;
+        e.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => a.classList.add('nav-link--dragging'));
+      });
+      a.addEventListener('dragend', () => {
+        a.classList.remove('nav-link--dragging');
+        nav.querySelectorAll('.nav-link--drop-target').forEach(el => el.classList.remove('nav-link--drop-target'));
+      });
+      a.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        nav.querySelectorAll('.nav-link--drop-target').forEach(el => el.classList.remove('nav-link--drop-target'));
+        a.classList.add('nav-link--drop-target');
+      });
+      a.addEventListener('dragleave', () => {
+        a.classList.remove('nav-link--drop-target');
+      });
+      a.addEventListener('drop', e => {
+        e.preventDefault();
+        if (dragSrc === null || dragSrc === idx) return;
+        const next = [...order];
+        const [moved] = next.splice(dragSrc, 1);
+        next.splice(idx, 0, moved);
+        order = next;
+        localStorage.setItem('koko_nav_order', JSON.stringify(order));
+        render();
+      });
+
+      nav.appendChild(a);
+    });
+    appendAdminLink();
+  }
+
+  render();
+}
+
+document.addEventListener('DOMContentLoaded', initNavOrder);
+
 // ── Admin nav injection ────────────────────────────────────────────────────────
 async function initAdminNav() {
   const token = localStorage.getItem('koko_token');
@@ -273,9 +364,9 @@ async function initAdminNav() {
   try {
     const me = await apiFetch('/api/users/me');
     if (!me || !me.is_admin) return;
+    window._koko_is_admin = true;
     const nav = document.querySelector('.sidebar nav');
     if (!nav) return;
-    // Avoid duplicates
     if (nav.querySelector('[href="/users"]')) return;
     const a = document.createElement('a');
     a.href = '/users';

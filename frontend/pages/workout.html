@@ -78,15 +78,7 @@
   <span class="sidebar-logo-mark">✦</span>
   <span class="sidebar-logo-text" x-text="username ? 'Hi, ' + username + '!' : 'Hi there!'"></span>
 </div>
-    <nav style="display:flex;flex-direction:column;gap:2px">
-      <a href="/dashboard" class="nav-link"><span class="nav-icon">📅</span><span class="nav-label">Daily Tracker</span></a>
-      <a href="/tasks"     class="nav-link"><span class="nav-icon">✅</span><span class="nav-label">Tasks</span></a>
-      <a href="/journal"   class="nav-link"><span class="nav-icon">📓</span><span class="nav-label">Journal</span></a>
-      <a href="/workout"   class="nav-link active"><span class="nav-icon">🏋️</span><span class="nav-label">Workout</span></a>
-      <a href="/finance"   class="nav-link"><span class="nav-icon">💰</span><span class="nav-label">Finance</span></a>
-      <a href="/documents" class="nav-link"><span class="nav-icon">📄</span><span class="nav-label">Documents</span></a>
-      <a href="/profile"   class="nav-link"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></a>
-    </nav>
+    <nav style="display:flex;flex-direction:column;gap:2px"></nav>
     <div style="flex:1"></div>
     <button @click="logout()" class="nav-link danger"><span class="nav-icon">←</span><span class="nav-label">Sign out</span></button>
   </aside>

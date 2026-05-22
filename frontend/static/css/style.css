@@ -69,11 +69,15 @@ body {
   transition: color 0.12s, background 0.12s;
   cursor: pointer;
   border: none;
+  border-top: 2px solid transparent;
   background: none;
   width: 100%;
   text-align: left;
   line-height: 1;
 }
+.nav-link[draggable="true"] { cursor: grab; }
+.nav-link--dragging { opacity: 0.35; cursor: grabbing !important; }
+.nav-link--drop-target { border-top-color: #1A1917 !important; }
 .nav-link .nav-icon {
   flex-shrink: 0;
   width: 20px;
