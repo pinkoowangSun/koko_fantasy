@@ -377,3 +377,211 @@ async function initAdminNav() {
 }
 
 document.addEventListener('DOMContentLoaded', initAdminNav);
+
+// ── Floating chat bubble ──────────────────────────────────────────────────────
+function initChatBubble() {
+  const style = document.createElement('style');
+  style.textContent = `
+    #koko-bubble-btn {
+      position: fixed; bottom: 28px; right: 28px; z-index: 9000;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: #1A1917; color: #fff; border: none; cursor: pointer;
+      font-size: 20px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,.22); transition: transform .15s, background .15s;
+    }
+    #koko-bubble-btn:hover { background: #333228; transform: scale(1.08); }
+    #koko-chat-panel {
+      position: fixed; bottom: 92px; right: 28px; z-index: 9000;
+      width: 360px; height: 520px; background: #fff;
+      border: 1px solid #E8E7E3; border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.14);
+      display: flex; flex-direction: column; overflow: hidden;
+      transform-origin: bottom right;
+      transition: opacity .18s, transform .18s;
+    }
+    #koko-chat-panel.koko-hidden { opacity: 0; transform: scale(.92); pointer-events: none; }
+    .koko-panel-header {
+      padding: 14px 16px; border-bottom: 1px solid #E8E7E3;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .koko-panel-title { font-size: 14px; font-weight: 600; color: #1A1917; display: flex; align-items: center; gap: 7px; }
+    .koko-panel-title span { color: #1A1917; font-size: 16px; }
+    .koko-close-btn {
+      background: none; border: none; cursor: pointer; color: #78776E;
+      font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px;
+    }
+    .koko-close-btn:hover { background: #F0EFE9; color: #1A1917; }
+    #koko-messages {
+      flex: 1; overflow-y: auto; padding: 16px 14px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .koko-msg { display: flex; flex-direction: column; max-width: 82%; }
+    .koko-msg.koko-user { align-self: flex-end; align-items: flex-end; }
+    .koko-msg.koko-bot  { align-self: flex-start; align-items: flex-start; }
+    .koko-bubble {
+      padding: 9px 13px; border-radius: 12px; font-size: 13.5px; line-height: 1.55;
+      word-break: break-word;
+    }
+    .koko-msg.koko-user .koko-bubble { background: #1A1917; color: #fff; border-bottom-right-radius: 4px; }
+    .koko-msg.koko-bot  .koko-bubble { background: #F6F5F2; color: #1A1917; border-bottom-left-radius: 4px; }
+    .koko-bubble strong { font-weight: 600; }
+    .koko-bubble ul { margin: 4px 0 0; padding-left: 16px; }
+    .koko-bubble li { margin-bottom: 2px; }
+    .koko-typing { display: flex; align-items: center; gap: 4px; padding: 10px 13px; }
+    .koko-dot { width: 7px; height: 7px; border-radius: 50%; background: #ABAAA5; animation: kokoPulse 1.2s infinite ease-in-out; }
+    .koko-dot:nth-child(2) { animation-delay: .2s; }
+    .koko-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes kokoPulse { 0%,80%,100% { transform: scale(.7); opacity:.5 } 40% { transform: scale(1); opacity:1 } }
+    .koko-input-row {
+      padding: 10px 12px; border-top: 1px solid #E8E7E3;
+      display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
+    }
+    #koko-input {
+      flex: 1; resize: none; border: 1px solid #D6D5D0; border-radius: 10px;
+      padding: 8px 11px; font-size: 13.5px; font-family: 'Inter', sans-serif;
+      line-height: 1.4; outline: none; max-height: 100px; overflow-y: auto;
+      background: #F6F5F2; color: #1A1917;
+    }
+    #koko-input:focus { border-color: #1A1917; background: #fff; }
+    #koko-send-btn {
+      width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
+      background: #1A1917; color: #fff; border: none; cursor: pointer;
+      font-size: 15px; display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    #koko-send-btn:hover:not(:disabled) { background: #333228; }
+    #koko-send-btn:disabled { opacity: .4; cursor: not-allowed; }
+  `;
+  document.head.appendChild(style);
+
+  const btn = document.createElement('button');
+  btn.id = 'koko-bubble-btn';
+  btn.title = 'Chat with Koko';
+  btn.innerHTML = '✦';
+
+  const panel = document.createElement('div');
+  panel.id = 'koko-chat-panel';
+  panel.className = 'koko-hidden';
+  panel.innerHTML = `
+    <div class="koko-panel-header">
+      <div class="koko-panel-title"><span>✦</span> Koko</div>
+      <button class="koko-close-btn" id="koko-close-btn" title="Close">✕</button>
+    </div>
+    <div id="koko-messages"></div>
+    <div class="koko-input-row">
+      <textarea id="koko-input" rows="1" placeholder="Ask Koko anything…"></textarea>
+      <button id="koko-send-btn" title="Send">↑</button>
+    </div>
+  `;
+
+  document.body.appendChild(btn);
+  document.body.appendChild(panel);
+
+  const messagesEl = document.getElementById('koko-messages');
+  const inputEl    = document.getElementById('koko-input');
+  const sendBtn    = document.getElementById('koko-send-btn');
+
+  let isOpen = false, isLoading = false;
+
+  function mdToHtml(text) {
+    const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let html = escaped
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>');
+    const lines = html.split('\n');
+    const out = []; let inList = false;
+    lines.forEach(line => {
+      const li = line.match(/^[-•]\s+(.*)/);
+      if (li) {
+        if (!inList) { out.push('<ul>'); inList = true; }
+        out.push(`<li>${li[1]}</li>`);
+      } else {
+        if (inList) { out.push('</ul>'); inList = false; }
+        out.push(line === '' ? '<br>' : `<span>${line}</span><br>`);
+      }
+    });
+    if (inList) out.push('</ul>');
+    return out.join('');
+  }
+
+  function addMessage(role, text) {
+    const wrap = document.createElement('div');
+    wrap.className = `koko-msg koko-${role}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'koko-bubble';
+    bubble.innerHTML = role === 'bot' ? mdToHtml(text) : text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return wrap;
+  }
+
+  function showTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'koko-msg koko-bot';
+    wrap.id = 'koko-typing';
+    wrap.innerHTML = '<div class="koko-typing"><div class="koko-dot"></div><div class="koko-dot"></div><div class="koko-dot"></div></div>';
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function removeTyping() {
+    document.getElementById('koko-typing')?.remove();
+  }
+
+  async function send() {
+    const text = inputEl.value.trim();
+    if (!text || isLoading) return;
+    isLoading = true;
+    sendBtn.disabled = true;
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+
+    addMessage('user', text);
+    showTyping();
+
+    try {
+      const data = await API.post('/chat/message', { message: text });
+      removeTyping();
+      addMessage('bot', data.response || 'No response.');
+    } catch (err) {
+      removeTyping();
+      addMessage('bot', `Sorry, something went wrong: ${err.message}`);
+    } finally {
+      isLoading = false;
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  function open() {
+    isOpen = true;
+    panel.classList.remove('koko-hidden');
+    inputEl.focus();
+    if (!messagesEl.children.length) {
+      addMessage('bot', 'Hi! I\'m Koko. You can ask me to add tasks, log workouts, check your finances, look up stock prices, weather, and more.');
+    }
+  }
+
+  function close() {
+    isOpen = false;
+    panel.classList.add('koko-hidden');
+  }
+
+  btn.addEventListener('click', () => isOpen ? close() : open());
+  document.getElementById('koko-close-btn').addEventListener('click', close);
+
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+  });
+  sendBtn.addEventListener('click', send);
+
+  window._kokoChat = { open, close, toggle: () => isOpen ? close() : open() };
+}
+
+document.addEventListener('DOMContentLoaded', initChatBubble);
