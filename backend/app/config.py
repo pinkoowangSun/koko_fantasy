@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Asset encryption (Fernet key — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
     ASSET_ENCRYPTION_KEY: str = ""
 
+    # External tools
+    TAVILY_API_KEY: str = ""  # https://tavily.com — required for web search tool
+
     # Super admin
     SUPER_ADMIN_TELEGRAM_ID: int = 5429764884
 

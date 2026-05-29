@@ -49,7 +49,7 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
 VALID_ACTIONS: list[str] = sorted(ACTION_CONFIGS.keys())
 VALID_DOMAINS: list[str] = sorted(DOMAIN_CONFIGS.keys())
 VALID_SCOPES: list[str] = sorted(
-    [d.scope_kw for d in DOMAIN_CONFIGS.values() if d.scope_kw] + ["all"]
+    [d.scope_kw for d in DOMAIN_CONFIGS.values() if d.scope_kw] + ["all", "tools"]
 )
 
 
@@ -111,7 +111,10 @@ or anything that does not need activity data.
 - "finance"  → user asks about spending, savings, financial goals, budget performance
 - "all"      → broad life-review question: "how have I been doing", \
 "what should I focus on", "give me insights", "how's my week going", etc.
-Multiple values allowed: ["tasks", "workouts"] if the question spans both domains.
+- "tools"    → user asks for live external data: stock/crypto prices, weather, \
+web search, current news, calculations, exchange rates, or anything that requires \
+real-time information not stored in their personal data.
+Multiple values allowed: ["tasks", "tools"] if the question blends personal data with live data.
 
 ━━━ DATA EXTRACTION RULES ━━━
 create + task:

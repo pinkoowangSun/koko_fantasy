@@ -1032,13 +1032,16 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
         if not phase1.context_scope:
             return {"action": "chat", "domain": "", "response": phase1.response, "data": {}}
 
-        rich_ctx = await build_rich_context(user.id, db, phase1.context_scope, user_timezone=user_tz)
+        use_tools = "tools" in phase1.context_scope
+        data_scope = [s for s in phase1.context_scope if s != "tools"]
+        rich_ctx = await build_rich_context(user.id, db, data_scope, user_timezone=user_tz) if data_scope else ""
         response = await generate_contextual_response(
             user_id=user.id,
             message=body.message,
             profile_summary=user.profile_summary or "",
             rich_context=rich_ctx,
             user_timezone=user_tz,
+            use_tools=use_tools,
         )
         return {"action": "chat", "domain": "", "response": response, "data": {}}
 

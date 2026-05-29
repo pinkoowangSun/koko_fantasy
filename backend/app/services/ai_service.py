@@ -173,11 +173,17 @@ async def generate_contextual_response(
     profile_summary: str,
     rich_context: str,
     user_timezone: str = "UTC",
+    use_tools: bool = False,
 ) -> str:
     """
     Phase 2 LLM call: generate a rich, data-aware conversational response.
-    Falls back to a generic reply if the call fails.
+
+    When use_tools=True, runs an agentic loop: the model may call web_search,
+    get_stock_price, get_weather, or calculate; results are fed back until the
+    model returns a final text reply (max 5 rounds).
     """
+    from app.services.tools_service import TOOL_DEFINITIONS, execute_tool
+
     history = await _get_recent_history(user_id, limit=10)
 
     context_block = _datetime_block(user_timezone) + "\n\n"
@@ -190,22 +196,68 @@ async def generate_contextual_response(
     if context_block:
         system += f"\n\n{context_block}"
 
-    messages = [{"role": "system", "content": system}]
+    messages: list[dict] = [{"role": "system", "content": system}]
     messages.extend(history)
     messages.append({"role": "user", "content": message})
 
     try:
-        resp = await _client.chat.completions.create(
-            model=settings.DEEPSEEK_MODEL,
-            messages=messages,
-            temperature=0.7,
-        )
-        reply = resp.choices[0].message.content
+        if not use_tools:
+            resp = await _client.chat.completions.create(
+                model=settings.DEEPSEEK_MODEL,
+                messages=messages,
+                temperature=0.7,
+            )
+            reply = resp.choices[0].message.content
+            await _save_messages(user_id, message, reply, "telegram")
+            return reply
+
+        # Agentic tool loop (max 5 rounds)
+        reply = ""
+        for _ in range(5):
+            resp = await _client.chat.completions.create(
+                model=settings.DEEPSEEK_MODEL,
+                messages=messages,
+                tools=TOOL_DEFINITIONS,
+                tool_choice="auto",
+                temperature=0.7,
+            )
+            choice = resp.choices[0]
+            msg = choice.message
+
+            if not msg.tool_calls:
+                reply = msg.content or ""
+                break
+
+            # Append assistant message with tool_calls
+            tool_calls_data = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in msg.tool_calls
+            ]
+            messages.append({"role": "assistant", "content": msg.content, "tool_calls": tool_calls_data})
+
+            # Execute all tool calls and append results
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    args = {}
+                result = await execute_tool(tc.function.name, args)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result, default=str),
+                })
+
         await _save_messages(user_id, message, reply, "telegram")
         return reply
+
     except Exception as exc:
         print(f"[ai] Phase 2 failed for user {user_id}: {exc}")
-        return "I'm having trouble pulling your data right now. Try again in a moment!"
+        return "I'm having trouble right now. Try again in a moment!"
 
 
 # ── Briefing (unchanged) ──────────────────────────────────────────────────────
