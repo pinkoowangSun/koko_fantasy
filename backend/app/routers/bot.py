@@ -151,13 +151,24 @@ async def _bot_auth(x_bot_key: str = Header(...)):
 
 
 async def _get_or_create_user(telegram_id: int, username: Optional[str], db: AsyncSession) -> User:
+    from app.routers.auth import _notify_admin
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
     if not user:
-        user = User(telegram_id=telegram_id, username=username)
+        is_admin = (telegram_id == settings.SUPER_ADMIN_TELEGRAM_ID)
+        user = User(
+            telegram_id=telegram_id,
+            username=username,
+            status="approved" if is_admin else "pending",
+            is_admin=is_admin,
+        )
         db.add(user)
         await db.commit()
         await db.refresh(user)
+        if not is_admin:
+            await _notify_admin(user)
+            user.notified_admin = True
+            await db.commit()
     return user
 
 
@@ -964,6 +975,11 @@ class IntentRequest(BaseModel):
 @router.post("/intent", dependencies=[Depends(_bot_auth)])
 async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
     user = await _get_or_create_user(body.telegram_id, body.username, db)
+
+    if user.status == "pending":
+        return {"action": "chat", "domain": "", "response": "⏳ Your access request has been sent to the admin. You'll be able to use Koko once it's approved.", "data": {}}
+    if user.status == "rejected":
+        return {"action": "chat", "domain": "", "response": "❌ Your access request was not approved.", "data": {}}
 
     # Auto-set timezone from language_code if still at default
     if user.timezone == "UTC" and body.language_code:
