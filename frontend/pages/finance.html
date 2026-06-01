@@ -249,12 +249,9 @@
             </div>
           </template>
           <template x-if="mainCurrency && !loadingRates && totalInMainCurrency() !== null">
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;margin-top:10px;background:#1A1917;border-radius:12px">
-              <div>
-                <div style="font-size:10px;font-weight:600;color:#78776E;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">Total Assets</div>
-                <div style="font-size:13px;font-weight:600;color:#E8E7E3" x-text="mainCurrency"></div>
-              </div>
-              <span style="font-size:22px;font-weight:700" :style="revealAssets ? 'color:#fff' : 'letter-spacing:4px;color:#4A4947'" x-text="revealAssets ? fmt(totalInMainCurrency()) + ' ' + mainCurrency : '••••••'"></span>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1A1917">
+              <span style="font-size:14px;font-weight:700;color:#1A1917">Total · <span x-text="mainCurrency"></span></span>
+              <span style="font-size:18px;font-weight:700" :style="revealAssets ? 'color:#1A1917' : 'letter-spacing:4px;color:#ABAAA5'" x-text="revealAssets ? fmt(totalInMainCurrency()) + ' ' + mainCurrency : '••••••'"></span>
             </div>
           </template>
         </div>
