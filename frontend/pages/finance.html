@@ -214,9 +214,17 @@
       </div>
 
       <!-- Asset totals -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 12px;flex-wrap:wrap;gap:8px">
         <p class="section-label">Total Assets</p>
-        <button @click="toggleRevealAll()" class="reveal-toggle" x-text="revealAssets ? '🙈 Hide amounts' : '👁 Reveal amounts'"></button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <select class="filter-select" x-model="mainCurrency" @change="fetchExchangeRates()" style="min-width:120px">
+            <option value="">Main currency…</option>
+            <template x-for="cur in assetCurrencies()" :key="'mc-'+cur">
+              <option :value="cur" x-text="cur"></option>
+            </template>
+          </select>
+          <button @click="toggleRevealAll()" class="reveal-toggle" x-text="revealAssets ? '🙈 Hide amounts' : '👁 Reveal amounts'"></button>
+        </div>
       </div>
       <template x-if="assets.length === 0">
         <div class="empty-state">No assets yet. <button @click="activeTab='assets';openAddAsset()" class="btn btn-secondary btn-sm" style="margin-left:8px">+ Add Asset</button></div>
@@ -224,9 +232,26 @@
       <template x-if="assets.length > 0">
         <div>
           <template x-for="(total, cur) in assetTotalsByCurrency()" :key="'asset-'+cur">
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #F0EFEC">
-              <span style="font-size:14px;font-weight:600;color:#1A1917" x-text="cur"></span>
-              <span style="font-size:18px;font-weight:600" :style="revealAssets ? '' : 'letter-spacing:4px;color:#ABAAA5'" x-text="revealAssets ? fmt(total) : '••••••'"></span>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F0EFEC">
+              <div style="display:flex;align-items:baseline;gap:6px">
+                <span style="font-size:14px;font-weight:600;color:#1A1917" x-text="cur"></span>
+                <template x-if="mainCurrency && cur !== mainCurrency && exchangeRates[cur] && revealAssets">
+                  <span style="font-size:11.5px;color:#ABAAA5" x-text="'≈ ' + fmt(total / exchangeRates[cur]) + ' ' + mainCurrency"></span>
+                </template>
+              </div>
+              <span style="font-size:18px;font-weight:600" :style="revealAssets ? 'color:#1A1917' : 'letter-spacing:4px;color:#ABAAA5'" x-text="revealAssets ? fmt(total) + ' ' + cur : '••••••'"></span>
+            </div>
+          </template>
+          <!-- Total in main currency -->
+          <template x-if="mainCurrency && loadingRates">
+            <div style="padding:12px 0;display:flex;align-items:center;gap:8px;color:#ABAAA5;font-size:13px">
+              <span class="spinner"></span> Fetching exchange rates…
+            </div>
+          </template>
+          <template x-if="mainCurrency && !loadingRates && totalInMainCurrency() !== null">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 2px;margin-top:4px;border-top:2px solid #1A1917">
+              <span style="font-size:13px;font-weight:700;color:#1A1917">Total · <span style="font-weight:500;color:#78776E" x-text="mainCurrency"></span></span>
+              <span style="font-size:20px;font-weight:700" :style="revealAssets ? 'color:#1A1917' : 'letter-spacing:4px;color:#ABAAA5'" x-text="revealAssets ? fmt(totalInMainCurrency()) + ' ' + mainCurrency : '••••••'"></span>
             </div>
           </template>
         </div>
@@ -636,6 +661,9 @@ function financeApp() {
     loadingTx: false,
     loadingInsights: false,
     revealAssets: false,
+    mainCurrency: '',
+    exchangeRates: {},
+    loadingRates: false,
 
     // Modals
     showTxModal: false, editingTx: null, savingTx: false,
@@ -916,6 +944,43 @@ function financeApp() {
     // ── Helpers ───────────────────────────────────────────────────────────
 
     toggleRevealAll() { this.revealAssets = !this.revealAssets; },
+
+    assetCurrencies() {
+      return [...new Set(this.assets.map(a => a.currency))].sort();
+    },
+
+    async fetchExchangeRates() {
+      if (!this.mainCurrency) { this.exchangeRates = {}; return; }
+      this.loadingRates = true;
+      try {
+        const res = await fetch(`https://open.er-api.com/v6/latest/${this.mainCurrency}`);
+        const data = await res.json();
+        if (data.result === 'success') {
+          this.exchangeRates = data.rates;
+        } else {
+          showToast('Could not fetch exchange rates', 'error');
+        }
+      } catch {
+        showToast('Could not fetch exchange rates', 'error');
+      } finally {
+        this.loadingRates = false;
+      }
+    },
+
+    totalInMainCurrency() {
+      if (!this.mainCurrency || !Object.keys(this.exchangeRates).length) return null;
+      const totals = this.assetTotalsByCurrency();
+      let total = 0;
+      for (const [cur, amount] of Object.entries(totals)) {
+        if (cur === this.mainCurrency) {
+          total += amount;
+        } else {
+          const rate = this.exchangeRates[cur];
+          if (rate) total += amount / rate;
+        }
+      }
+      return total;
+    },
 
     assetTotalsByCurrency() {
       const totals = {};
