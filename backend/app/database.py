@@ -40,6 +40,8 @@ async def init_db():
             "ALTER TABLE documents ADD COLUMN updated_at DATETIME",
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_user_key ON memory_items (user_id, key)",
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_workout_plan_user_week ON workout_plans (user_id, week_start)",
+            "ALTER TABLE finance_transactions ADD COLUMN asset_id INTEGER REFERENCES finance_assets(id)",
+            "ALTER TABLE finance_transactions ADD COLUMN to_asset_id INTEGER REFERENCES finance_assets(id)",
         ]:
             try:
                 await conn.execute(text(sql))

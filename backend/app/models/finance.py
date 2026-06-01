@@ -55,5 +55,7 @@ class Transaction(Base):
     description = Column(Text, nullable=True)
     transaction_date = Column(Date, nullable=False, default=date.today, index=True)
     source = Column(String, nullable=False, default="web")          # web | telegram
+    asset_id = Column(Integer, ForeignKey("finance_assets.id"), nullable=True)    # account this tx applies to
+    to_asset_id = Column(Integer, ForeignKey("finance_assets.id"), nullable=True) # transfer destination
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

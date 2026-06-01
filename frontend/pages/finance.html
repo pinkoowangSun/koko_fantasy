@@ -131,6 +131,7 @@
         <p style="font-size:13px;color:#78776E;margin-top:2px">Build financial health, reach your goals — your data is encrypted and yours alone.</p>
       </div>
       <div style="display:flex;gap:8px">
+        <button @click="openSettings()" class="btn btn-secondary" title="Default accounts">⚙ Accounts</button>
         <button @click="openAddTransaction()" class="btn btn-secondary">+ Transaction</button>
         <button @click="activeTab='goals';openAddGoal()" class="btn btn-primary">+ Goal</button>
       </div>
@@ -437,11 +438,11 @@
                   </div>
                   <div class="asset-amount" :class="revealAssets ? '' : 'masked'" style="margin-top:10px"
                        x-text="revealAssets ? fmt(a.amount) + ' ' + a.currency : '••••••'"></div>
-                  <!-- Monthly transaction impact -->
-                  <template x-if="summary.net_by_currency[a.currency] !== undefined">
+                  <!-- Monthly transaction impact (only linked transactions for this asset) -->
+                  <template x-if="a.monthly_net !== 0">
                     <div style="margin-top:6px;font-size:11.5px;font-weight:500"
-                         :style="summary.net_by_currency[a.currency] >= 0 ? 'color:#16a34a' : 'color:#dc2626'">
-                      <span x-text="(summary.net_by_currency[a.currency] >= 0 ? '↑ +' : '↓ ') + fmt(summary.net_by_currency[a.currency]) + ' this month'"></span>
+                         :style="a.monthly_net >= 0 ? 'color:#16a34a' : 'color:#dc2626'">
+                      <span x-text="(a.monthly_net >= 0 ? '↑ +' : '↓ ') + fmt(a.monthly_net) + ' this month'"></span>
                     </div>
                   </template>
                   <div x-show="a.notes" style="font-size:12px;color:#ABAAA5;margin-top:5px" x-text="a.notes"></div>
@@ -477,9 +478,9 @@
       <div class="form-group">
         <label class="form-label">Type</label>
         <div class="type-toggle">
-          <button class="type-btn" :class="txForm.transaction_type==='income' ? 'income-active' : ''" @click="txForm.transaction_type='income'">+ Income</button>
-          <button class="type-btn" :class="txForm.transaction_type==='expense' ? 'expense-active' : ''" @click="txForm.transaction_type='expense'">− Expense</button>
-          <button class="type-btn" :class="txForm.transaction_type==='transfer' ? 'transfer-active' : ''" @click="txForm.transaction_type='transfer'">↔ Transfer</button>
+          <button class="type-btn" :class="txForm.transaction_type==='income' ? 'income-active' : ''" @click="txForm.transaction_type='income';applyDefaultAccount()">+ Income</button>
+          <button class="type-btn" :class="txForm.transaction_type==='expense' ? 'expense-active' : ''" @click="txForm.transaction_type='expense';applyDefaultAccount()">− Expense</button>
+          <button class="type-btn" :class="txForm.transaction_type==='transfer' ? 'transfer-active' : ''" @click="txForm.transaction_type='transfer';applyDefaultAccount()">↔ Transfer</button>
         </div>
       </div>
       <div class="form-row">
@@ -512,6 +513,38 @@
           <option value="other">Other</option>
         </select>
       </div>
+      <!-- Account picker (income → income account; expense/transfer → spend account + to_account) -->
+      <div class="form-group" x-show="txForm.transaction_type !== 'transfer'">
+        <label class="form-label" x-text="txForm.transaction_type === 'income' ? 'Income Account' : 'Spend Account'"></label>
+        <select class="form-input" x-model.number="txForm.asset_id">
+          <option :value="null">— Unlinked —</option>
+          <template x-for="a in assets" :key="'acct-'+a.id">
+            <option :value="a.id" x-text="a.name + ' (' + a.currency + ')'"></option>
+          </template>
+        </select>
+      </div>
+      <template x-if="txForm.transaction_type === 'transfer'">
+        <div>
+          <div class="form-group">
+            <label class="form-label">From Account</label>
+            <select class="form-input" x-model.number="txForm.asset_id">
+              <option :value="null">— Unlinked —</option>
+              <template x-for="a in assets" :key="'from-'+a.id">
+                <option :value="a.id" x-text="a.name + ' (' + a.currency + ')'"></option>
+              </template>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">To Account</label>
+            <select class="form-input" x-model.number="txForm.to_asset_id">
+              <option :value="null">— Unlinked —</option>
+              <template x-for="a in assets.filter(a => a.id !== txForm.asset_id)" :key="'to-'+a.id">
+                <option :value="a.id" x-text="a.name + ' (' + a.currency + ')'"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+      </template>
       <div class="form-group">
         <label class="form-label">Date</label>
         <input type="date" class="form-input" x-model="txForm.transaction_date" />
@@ -701,6 +734,41 @@
   </div>
 </template>
 
+<!-- ── DEFAULT ACCOUNTS SETTINGS MODAL ───────────────────────────────────── -->
+<template x-if="showSettingsModal">
+  <div class="modal-overlay" @click.self="showSettingsModal=false">
+    <div class="modal-box">
+      <div class="modal-title">Default Accounts</div>
+      <p style="font-size:13px;color:#78776E;margin-bottom:18px">Transactions will automatically apply to these accounts unless you choose a different one.</p>
+      <div class="form-group">
+        <label class="form-label">Default Income Account</label>
+        <select class="form-input" x-model.number="settingsForm.default_income_account_id">
+          <option :value="null">— None —</option>
+          <template x-for="a in assets" :key="'si-'+a.id">
+            <option :value="a.id" x-text="a.name + ' (' + a.currency + ')'"></option>
+          </template>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Default Spend Account</label>
+        <select class="form-input" x-model.number="settingsForm.default_spend_account_id">
+          <option :value="null">— None —</option>
+          <template x-for="a in assets" :key="'ss-'+a.id">
+            <option :value="a.id" x-text="a.name + ' (' + a.currency + ')'"></option>
+          </template>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button @click="showSettingsModal=false" class="btn btn-secondary">Cancel</button>
+        <button @click="saveSettings()" class="btn btn-primary" :disabled="savingSettings">
+          <span x-show="savingSettings" class="spinner" style="margin-right:5px"></span>
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
 <script src="/static/js/app.js"></script>
 <script>
 // Chart instances
@@ -733,12 +801,14 @@ function financeApp() {
     showGoalModal: false, editingGoal: null, savingGoal: false,
     showAssetModal: false, editingAsset: null, savingAsset: false,
     showTrendModal: false, trendAsset: null, trendData: null, loadingTrend: false,
+    showSettingsModal: false, savingSettings: false,
+    settingsForm: { default_income_account_id: null, default_spend_account_id: null },
 
     // Filters
     txFilter: { type:'', category:'', start_date:'', end_date:'' },
 
     // Forms
-    txForm: { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10) },
+    txForm: { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10), asset_id: null, to_asset_id: null },
     goalForm: { title:'', goal_type:'saving_target', term:'mid', target_amount:0, currency:'SGD', deadline:'', description:'', status:'active' },
     assetForm: { name:'', asset_type:'cash', amount:0, currency:'SGD', institution:'', notes:'' },
 
@@ -753,7 +823,7 @@ function financeApp() {
         this.username = me.username || me.telegram_id;
       } catch { window.location.href = '/'; return; }
 
-      await Promise.all([this.loadGoals(), this.loadAssets(), this.loadMonthlySummary()]);
+      await Promise.all([this.loadGoals(), this.loadAssets(), this.loadMonthlySummary(), this.loadSettings()]);
     },
 
     logout() { localStorage.removeItem('koko_token'); window.location.href = '/'; },
@@ -794,6 +864,14 @@ function financeApp() {
 
     async loadAssets() {
       try { this.assets = await API.get('/finance/assets'); } catch {}
+    },
+
+    async loadSettings() {
+      try {
+        const s = await API.get('/finance/settings');
+        this.settingsForm.default_income_account_id = s.default_income_account_id;
+        this.settingsForm.default_spend_account_id = s.default_spend_account_id;
+      } catch {}
     },
 
     async loadInsights() {
@@ -860,8 +938,19 @@ function financeApp() {
 
     openAddTransaction() {
       this.editingTx = null;
-      this.txForm = { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10) };
+      this.txForm = { amount:0, transaction_type:'expense', category:'other', currency:'SGD', description:'', transaction_date: new Date().toISOString().slice(0,10), asset_id: this.settingsForm.default_spend_account_id, to_asset_id: null };
       this.showTxModal = true;
+    },
+
+    applyDefaultAccount() {
+      if (this.editingTx) return; // don't override when editing
+      if (this.txForm.transaction_type === 'income') {
+        this.txForm.asset_id = this.settingsForm.default_income_account_id;
+        this.txForm.to_asset_id = null;
+      } else {
+        this.txForm.asset_id = this.settingsForm.default_spend_account_id;
+        this.txForm.to_asset_id = null;
+      }
     },
 
     openEditTransaction(tx) {
@@ -873,6 +962,8 @@ function financeApp() {
         currency: tx.currency,
         description: tx.description || '',
         transaction_date: tx.transaction_date,
+        asset_id: tx.asset_id || null,
+        to_asset_id: tx.to_asset_id || null,
       };
       this.showTxModal = true;
     },
@@ -891,7 +982,7 @@ function financeApp() {
           showToast('Transaction saved');
         }
         this.showTxModal = false;
-        await Promise.all([this.loadTransactions(), this.loadMonthlySummary()]);
+        await Promise.all([this.loadTransactions(), this.loadMonthlySummary(), this.loadAssets()]);
       } catch(e) { showToast('Failed to save: ' + (e.message||e), 'error'); }
       finally { this.savingTx = false; }
     },
@@ -902,8 +993,29 @@ function financeApp() {
         await API.delete(`/finance/transactions/${id}`);
         this.transactions = this.transactions.filter(t=>t.id!==id);
         showToast('Deleted');
-        await this.loadMonthlySummary();
+        await Promise.all([this.loadMonthlySummary(), this.loadAssets()]);
       } catch(e) { showToast('Failed to delete', 'error'); }
+    },
+
+    // ── Settings ──────────────────────────────────────────────────────────
+
+    openSettings() {
+      this.showSettingsModal = true;
+    },
+
+    async saveSettings() {
+      this.savingSettings = true;
+      try {
+        const payload = {};
+        if (this.settingsForm.default_income_account_id != null) payload.default_income_account_id = this.settingsForm.default_income_account_id;
+        else payload.default_income_account_id = null;
+        if (this.settingsForm.default_spend_account_id != null) payload.default_spend_account_id = this.settingsForm.default_spend_account_id;
+        else payload.default_spend_account_id = null;
+        await API.patch('/finance/settings', payload);
+        this.showSettingsModal = false;
+        showToast('Default accounts saved');
+      } catch(e) { showToast('Failed to save: ' + (e.message||e), 'error'); }
+      finally { this.savingSettings = false; }
     },
 
     // ── CRUD — Goals ──────────────────────────────────────────────────────

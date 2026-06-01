@@ -663,24 +663,53 @@ async def _handle_generate_briefing(user: User, db: AsyncSession) -> dict:
 
 
 async def _handle_create_finance_transaction(data: dict, user: User, db: AsyncSession) -> dict:
-    from app.routers.finance import _tx_to_out
+    from app.routers.finance import _adjust_asset, _adjust_to_asset
+    from app.models.finance import Asset
     tx_date = None
     if data.get("transaction_date"):
         try:
             tx_date = date.fromisoformat(data["transaction_date"])
         except ValueError:
             pass
+
+    tx_type = data.get("transaction_type", "expense")
+    asset_id = data.get("asset_id")
+    to_asset_id = data.get("to_asset_id")
+
+    # Resolve account_name → asset_id by case-insensitive name match
+    account_name = (data.get("account_name") or "").strip()
+    if account_name and asset_id is None:
+        all_assets = (await db.execute(
+            select(Asset).where(Asset.user_id == user.id)
+        )).scalars().all()
+        name_lower = account_name.lower()
+        matched = next((a for a in all_assets if name_lower in a.name.lower() or a.name.lower() in name_lower), None)
+        if matched:
+            asset_id = matched.id
+
+    # Fall back to user's default account if still unresolved
+    if asset_id is None:
+        prefs = user.preferences or {}
+        if tx_type == "income":
+            asset_id = prefs.get("default_income_account_id")
+        elif tx_type in ("expense", "transfer"):
+            asset_id = prefs.get("default_spend_account_id")
+
     tx = Transaction(
         user_id=user.id,
         amount=float(data.get("amount", 0) or 0),
-        transaction_type=data.get("transaction_type", "expense"),
+        transaction_type=tx_type,
         category=data.get("category", "other"),
         currency=(data.get("currency") or "SGD").upper(),
         description=data.get("description"),
         transaction_date=tx_date or _local_date(user),
         source="telegram",
+        asset_id=asset_id,
+        to_asset_id=to_asset_id,
     )
     db.add(tx)
+    await _adjust_asset(asset_id, tx_type, tx.amount, False, db, user.id)
+    await _adjust_to_asset(to_asset_id, tx_type, tx.amount, False, db, user.id)
     await db.commit()
     sign = "+" if tx.transaction_type == "income" else "-"
     return {
@@ -690,6 +719,7 @@ async def _handle_create_finance_transaction(data: dict, user: User, db: AsyncSe
 
 
 async def _handle_delete_finance_transaction(data: dict, user: User, db: AsyncSession) -> dict:
+    from app.routers.finance import _adjust_asset, _adjust_to_asset
     tx_id = data.get("transaction_id")
     if not tx_id:
         return {"response": "Please specify the transaction ID to delete.", "data": {}}
@@ -698,6 +728,8 @@ async def _handle_delete_finance_transaction(data: dict, user: User, db: AsyncSe
     )).scalar_one_or_none()
     if not tx:
         return {"response": f"No transaction #{tx_id} found.", "data": {}}
+    await _adjust_asset(tx.asset_id, tx.transaction_type, tx.amount, True, db, user.id)
+    await _adjust_to_asset(tx.to_asset_id, tx.transaction_type, tx.amount, True, db, user.id)
     await db.delete(tx)
     await db.commit()
     return {"response": f"🗑 Transaction #{tx_id} deleted.", "data": {}}

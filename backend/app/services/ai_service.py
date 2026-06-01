@@ -404,6 +404,7 @@ async def parse_finance_transaction(user_id: int, text: str, user_timezone: str 
         '  "currency": "<3-letter code, e.g. SGD, USD — default SGD if not mentioned>",\n'
         '  "description": "<brief description or null>",\n'
         '  "transaction_date": "<ISO date YYYY-MM-DD, today if not mentioned>",\n'
+        '  "account_name": "<account/wallet/bank name if mentioned via \'in X\', \'to X\', \'from X\', \'via X\', \'into X\'; null if not mentioned>",\n'
         '  "record_type": "transaction"\n'
         '}}\n\n'
         f'Text: {text}\n\n'

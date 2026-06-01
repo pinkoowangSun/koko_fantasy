@@ -16,6 +16,7 @@ from app.schemas.finance import (
     AssetCreate, AssetOut, AssetUpdate,
     FinanceDailyOut, FinanceGoalCreate, FinanceGoalOut, FinanceGoalUpdate,
     FinanceInsightsOut, FinanceSummaryOut,
+    FinanceSettingsOut, FinanceSettingsUpdate,
     TransactionCreate, TransactionOut, TransactionUpdate,
 )
 from app.services.ai_service import generate_finance_insights
@@ -225,7 +226,7 @@ async def delete_goal(
 
 # ── Assets ────────────────────────────────────────────────────────────────────
 
-def _asset_to_out(asset: Asset) -> AssetOut:
+def _asset_to_out(asset: Asset, monthly_net: float = 0.0) -> AssetOut:
     try:
         amount = decrypt_amount(asset.amount_encrypted)
     except Exception:
@@ -239,6 +240,7 @@ def _asset_to_out(asset: Asset) -> AssetOut:
         institution=asset.institution,
         notes=asset.notes,
         created_at=asset.created_at.isoformat() if asset.created_at else "",
+        monthly_net=round(monthly_net, 2),
     )
 
 
@@ -252,7 +254,30 @@ async def list_assets(
         .where(Asset.user_id == current_user.id)
         .order_by(Asset.asset_type.asc(), Asset.name.asc())
     )).scalars().all()
-    return [_asset_to_out(a) for a in assets]
+
+    # Compute per-asset monthly net from linked transactions
+    month_start = date.today().replace(day=1)
+    month_txs = (await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.user_id == current_user.id,
+            Transaction.transaction_date >= month_start,
+            Transaction.asset_id.isnot(None),
+        )
+    )).scalars().all()
+
+    asset_monthly_net: dict[int, float] = defaultdict(float)
+    for t in month_txs:
+        if t.transaction_type == "income":
+            asset_monthly_net[t.asset_id] += t.amount
+        elif t.transaction_type == "expense":
+            asset_monthly_net[t.asset_id] -= t.amount
+        elif t.transaction_type == "transfer":
+            asset_monthly_net[t.asset_id] -= t.amount
+            if t.to_asset_id:
+                asset_monthly_net[t.to_asset_id] += t.amount
+
+    return [_asset_to_out(a, asset_monthly_net.get(a.id, 0.0)) for a in assets]
 
 
 @router.post("/assets", response_model=AssetOut, status_code=201)
@@ -339,7 +364,7 @@ async def get_asset_trend(
 
     txs = (await db.execute(
         select(Transaction)
-        .where(Transaction.user_id == current_user.id, Transaction.currency == asset.currency)
+        .where(Transaction.user_id == current_user.id, Transaction.asset_id == asset_id)
         .order_by(Transaction.transaction_date.asc())
     )).scalars().all()
 
@@ -351,6 +376,12 @@ async def get_asset_trend(
             monthly_net[month] += t.amount
         elif t.transaction_type == "expense":
             monthly_net[month] -= t.amount
+        elif t.transaction_type == "transfer":
+            # source: money leaves; destination (to_asset_id): money arrives
+            if t.asset_id == asset_id:
+                monthly_net[month] -= t.amount
+            if t.to_asset_id == asset_id:
+                monthly_net[month] += t.amount
 
     months = sorted(monthly_net.keys())
 
@@ -388,8 +419,56 @@ def _tx_to_out(t: Transaction) -> TransactionOut:
         description=t.description,
         transaction_date=t.transaction_date.isoformat() if t.transaction_date else "",
         source=t.source,
+        asset_id=t.asset_id,
+        to_asset_id=t.to_asset_id,
         created_at=t.created_at.isoformat() if t.created_at else "",
     )
+
+
+async def _adjust_asset(asset_id: Optional[int], tx_type: str, amount: float, reverse: bool, db: AsyncSession, user_id: int) -> None:
+    """Apply or reverse a transaction's effect on the linked asset balance (same-currency only)."""
+    if not asset_id:
+        return
+    asset = (await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.user_id == user_id)
+    )).scalar_one_or_none()
+    if not asset:
+        return
+    try:
+        current = decrypt_amount(asset.amount_encrypted)
+    except Exception:
+        return
+
+    if tx_type == "income":
+        delta = -amount if reverse else amount
+    elif tx_type == "expense":
+        delta = amount if reverse else -amount
+    elif tx_type == "transfer":
+        delta = amount if reverse else -amount  # source asset loses money
+    else:
+        return
+
+    asset.amount_encrypted = encrypt_amount(current + delta)
+    asset.updated_at = datetime.utcnow()
+
+
+async def _adjust_to_asset(to_asset_id: Optional[int], tx_type: str, amount: float, reverse: bool, db: AsyncSession, user_id: int) -> None:
+    """Apply or reverse a transfer's effect on the destination asset."""
+    if not to_asset_id or tx_type != "transfer":
+        return
+    asset = (await db.execute(
+        select(Asset).where(Asset.id == to_asset_id, Asset.user_id == user_id)
+    )).scalar_one_or_none()
+    if not asset:
+        return
+    try:
+        current = decrypt_amount(asset.amount_encrypted)
+    except Exception:
+        return
+
+    delta = -amount if reverse else amount  # destination gains money
+    asset.amount_encrypted = encrypt_amount(current + delta)
+    asset.updated_at = datetime.utcnow()
 
 
 @router.get("/transactions", response_model=list[TransactionOut])
@@ -425,6 +504,16 @@ async def create_transaction(
     current_user: User = Depends(require_approved),
     db: AsyncSession = Depends(get_db),
 ):
+    # Resolve account: explicit > default from user preferences
+    asset_id = body.asset_id
+    to_asset_id = body.to_asset_id
+    if asset_id is None:
+        prefs = current_user.preferences or {}
+        if body.transaction_type == "income":
+            asset_id = prefs.get("default_income_account_id")
+        elif body.transaction_type in ("expense", "transfer"):
+            asset_id = prefs.get("default_spend_account_id")
+
     tx = Transaction(
         user_id=current_user.id,
         amount=body.amount,
@@ -434,8 +523,12 @@ async def create_transaction(
         description=body.description,
         transaction_date=body.transaction_date or date.today(),
         source="web",
+        asset_id=asset_id,
+        to_asset_id=to_asset_id,
     )
     db.add(tx)
+    await _adjust_asset(asset_id, body.transaction_type, body.amount, False, db, current_user.id)
+    await _adjust_to_asset(to_asset_id, body.transaction_type, body.amount, False, db, current_user.id)
     await db.commit()
     await db.refresh(tx)
     return _tx_to_out(tx)
@@ -454,12 +547,30 @@ async def update_transaction(
     if not tx:
         raise HTTPException(404, "Transaction not found")
 
+    old_amount = tx.amount
+    old_type = tx.transaction_type
+    old_asset_id = tx.asset_id
+    old_to_asset_id = tx.to_asset_id
+
     updates = body.model_dump(exclude_unset=True)
     if "currency" in updates and updates["currency"]:
         updates["currency"] = updates["currency"].upper()
     for field, value in updates.items():
         setattr(tx, field, value)
     tx.updated_at = datetime.utcnow()
+
+    financially_changed = (
+        tx.amount != old_amount or
+        tx.transaction_type != old_type or
+        tx.asset_id != old_asset_id or
+        tx.to_asset_id != old_to_asset_id
+    )
+    if financially_changed:
+        await _adjust_asset(old_asset_id, old_type, old_amount, True, db, current_user.id)
+        await _adjust_to_asset(old_to_asset_id, old_type, old_amount, True, db, current_user.id)
+        await _adjust_asset(tx.asset_id, tx.transaction_type, tx.amount, False, db, current_user.id)
+        await _adjust_to_asset(tx.to_asset_id, tx.transaction_type, tx.amount, False, db, current_user.id)
+
     await db.commit()
     await db.refresh(tx)
     return _tx_to_out(tx)
@@ -476,6 +587,8 @@ async def delete_transaction(
     )).scalar_one_or_none()
     if not tx:
         raise HTTPException(404, "Transaction not found")
+    await _adjust_asset(tx.asset_id, tx.transaction_type, tx.amount, True, db, current_user.id)
+    await _adjust_to_asset(tx.to_asset_id, tx.transaction_type, tx.amount, True, db, current_user.id)
     await db.delete(tx)
     await db.commit()
 
@@ -551,6 +664,47 @@ async def get_daily(
         income_by_currency={k: round(v, 2) for k, v in income_by_currency.items()},
         expense_by_currency={k: round(v, 2) for k, v in expense_by_currency.items()},
         transactions=[_tx_to_out(t) for t in txs],
+    )
+
+
+# ── Finance Settings (default accounts) ──────────────────────────────────────
+
+@router.get("/settings", response_model=FinanceSettingsOut)
+async def get_finance_settings(
+    current_user: User = Depends(require_approved),
+):
+    prefs = current_user.preferences or {}
+    return FinanceSettingsOut(
+        default_spend_account_id=prefs.get("default_spend_account_id"),
+        default_income_account_id=prefs.get("default_income_account_id"),
+    )
+
+
+@router.patch("/settings", response_model=FinanceSettingsOut)
+async def update_finance_settings(
+    body: FinanceSettingsUpdate,
+    current_user: User = Depends(require_approved),
+    db: AsyncSession = Depends(get_db),
+):
+    updates = body.model_dump(exclude_unset=True)
+    # Validate that the referenced assets belong to this user
+    for key in ("default_spend_account_id", "default_income_account_id"):
+        if key in updates and updates[key] is not None:
+            asset = (await db.execute(
+                select(Asset).where(Asset.id == updates[key], Asset.user_id == current_user.id)
+            )).scalar_one_or_none()
+            if not asset:
+                raise HTTPException(404, f"Asset {updates[key]} not found")
+
+    prefs = dict(current_user.preferences or {})
+    prefs.update(updates)
+    current_user.preferences = prefs
+    current_user.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(current_user)
+    return FinanceSettingsOut(
+        default_spend_account_id=prefs.get("default_spend_account_id"),
+        default_income_account_id=prefs.get("default_income_account_id"),
     )
 
 

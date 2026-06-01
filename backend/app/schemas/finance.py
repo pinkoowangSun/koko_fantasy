@@ -81,6 +81,7 @@ class AssetOut(BaseModel):
     institution: Optional[str]
     notes: Optional[str]
     created_at: str
+    monthly_net: float = 0.0   # net change from linked transactions this month
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
@@ -92,6 +93,8 @@ class TransactionCreate(BaseModel):
     currency: str = Field(default="SGD", max_length=10)
     description: Optional[str] = None
     transaction_date: Optional[date] = None
+    asset_id: Optional[int] = None
+    to_asset_id: Optional[int] = None
 
 
 class TransactionUpdate(BaseModel):
@@ -101,6 +104,8 @@ class TransactionUpdate(BaseModel):
     currency: Optional[str] = None
     description: Optional[str] = None
     transaction_date: Optional[date] = None
+    asset_id: Optional[int] = None
+    to_asset_id: Optional[int] = None
 
 
 class TransactionOut(BaseModel):
@@ -114,7 +119,19 @@ class TransactionOut(BaseModel):
     description: Optional[str]
     transaction_date: str
     source: str
+    asset_id: Optional[int]
+    to_asset_id: Optional[int]
     created_at: str
+
+
+class FinanceSettingsOut(BaseModel):
+    default_spend_account_id: Optional[int]
+    default_income_account_id: Optional[int]
+
+
+class FinanceSettingsUpdate(BaseModel):
+    default_spend_account_id: Optional[int] = None
+    default_income_account_id: Optional[int] = None
 
 
 # ── Summary & Insights ────────────────────────────────────────────────────────

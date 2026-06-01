@@ -151,7 +151,8 @@ create + finance (TRANSACTION — when user mentions spending/receiving money wi
   category (food/grocery/transport/housing/utilities/entertainment/health/education/gift/shopping/travel/salary/freelance/investment/other),
   currency (3-letter code; default SGD if not mentioned),
   description (brief description or null),
-  transaction_date (ISO date; today if not mentioned)
+  transaction_date (ISO date; today if not mentioned),
+  account_name (the account/wallet/bank name if mentioned; e.g. "paypal", "DBS", "cash" — extract from phrases like "in X", "to X", "from X", "via X", "into X"; null if not mentioned)
 create + finance (GOAL — when user says "set a goal", "save X by Y", "budget X per month", "spending limit"):
   record_type="goal" (required, always set this),
   title (short goal name), goal_type (spending_limit/saving_target/income_target/custom),
