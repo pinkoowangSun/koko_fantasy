@@ -424,19 +424,26 @@
             <p class="section-label" style="margin-bottom:8px" x-text="assetTypeLabel(assetType)"></p>
             <div class="asset-grid">
               <template x-for="a in assets.filter(a=>a.asset_type===assetType)" :key="a.id">
-                <div class="asset-card">
+                <div class="asset-card" style="cursor:pointer" @click.self="openAssetTrend(a)">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                    <div>
+                    <div @click="openAssetTrend(a)" style="flex:1;min-width:0;cursor:pointer">
                       <div style="font-size:14px;font-weight:600;color:#1A1917;margin-bottom:2px" x-text="a.name"></div>
                       <div style="font-size:12px;color:#ABAAA5" x-text="(a.institution ? a.institution + ' · ' : '') + a.currency"></div>
                     </div>
                     <div style="display:flex;gap:2px">
-                      <button class="icon-btn" @click="openEditAsset(a)">✏️</button>
-                      <button class="icon-btn danger" @click="deleteAsset(a.id)">🗑</button>
+                      <button class="icon-btn" @click.stop="openEditAsset(a)">✏️</button>
+                      <button class="icon-btn danger" @click.stop="deleteAsset(a.id)">🗑</button>
                     </div>
                   </div>
                   <div class="asset-amount" :class="revealAssets ? '' : 'masked'" style="margin-top:10px"
                        x-text="revealAssets ? fmt(a.amount) + ' ' + a.currency : '••••••'"></div>
+                  <!-- Monthly transaction impact -->
+                  <template x-if="summary.net_by_currency[a.currency] !== undefined">
+                    <div style="margin-top:6px;font-size:11.5px;font-weight:500"
+                         :style="summary.net_by_currency[a.currency] >= 0 ? 'color:#16a34a' : 'color:#dc2626'">
+                      <span x-text="(summary.net_by_currency[a.currency] >= 0 ? '↑ +' : '↓ ') + fmt(summary.net_by_currency[a.currency]) + ' this month'"></span>
+                    </div>
+                  </template>
                   <div x-show="a.notes" style="font-size:12px;color:#ABAAA5;margin-top:5px" x-text="a.notes"></div>
                 </div>
               </template>
@@ -639,11 +646,67 @@
   </div>
 </template>
 
+<!-- ── ASSET TREND MODAL ──────────────────────────────────────────────────── -->
+<template x-if="showTrendModal">
+  <div class="modal-overlay" @click.self="showTrendModal=false">
+    <div class="modal-box" style="max-width:560px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+        <div>
+          <div class="modal-title" style="margin-bottom:2px" x-text="trendAsset ? trendAsset.name : ''"></div>
+          <div style="font-size:12px;color:#ABAAA5" x-text="trendAsset ? (trendAsset.institution ? trendAsset.institution + ' · ' : '') + trendAsset.currency : ''"></div>
+        </div>
+        <button @click="showTrendModal=false" class="icon-btn">✕</button>
+      </div>
+
+      <div x-show="loadingTrend" class="empty-state" style="padding:30px 0"><span class="spinner"></span></div>
+
+      <template x-if="!loadingTrend && trendData">
+        <div>
+          <!-- Current balance -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 14px;border-bottom:1px solid #F0EFEC;margin-bottom:16px">
+            <span style="font-size:12px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px">Current Balance</span>
+            <span style="font-size:20px;font-weight:700;color:#1A1917" x-text="revealAssets ? (fmt(trendAsset.amount) + ' ' + trendAsset.currency) : '••••••'"></span>
+          </div>
+
+          <!-- Chart -->
+          <div x-show="trendData.monthly.length > 1">
+            <div style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Balance Over Time</div>
+            <canvas id="trendChart" height="160"></canvas>
+          </div>
+
+          <!-- Monthly table -->
+          <template x-if="trendData.monthly.length > 0">
+            <div style="margin-top:18px">
+              <div style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Monthly Activity</div>
+              <template x-for="row in [...trendData.monthly].reverse().slice(0,6)" :key="row.month">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #F0EFEC">
+                  <span style="font-size:13px;color:#78776E" x-text="row.month"></span>
+                  <div style="display:flex;gap:16px;align-items:center">
+                    <span style="font-size:12px;font-weight:500" :style="row.net_change >= 0 ? 'color:#16a34a' : 'color:#dc2626'"
+                          x-text="(row.net_change >= 0 ? '+' : '') + fmt(row.net_change) + ' ' + trendAsset.currency"
+                          x-show="row.net_change !== 0"></span>
+                    <span style="font-size:13.5px;font-weight:600;color:#1A1917" x-text="revealAssets ? fmt(row.balance) : '••••'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <template x-if="trendData.monthly.length === 0">
+            <div class="empty-state" style="padding:20px 0">No transaction history for this currency yet.</div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+</template>
+
 <script src="/static/js/app.js"></script>
 <script>
 // Chart instances
 let _barChart = null;
 let _pieChart = null;
+let _trendChart = null;
 
 function financeApp() {
   return {
@@ -669,6 +732,7 @@ function financeApp() {
     showTxModal: false, editingTx: null, savingTx: false,
     showGoalModal: false, editingGoal: null, savingGoal: false,
     showAssetModal: false, editingAsset: null, savingAsset: false,
+    showTrendModal: false, trendAsset: null, trendData: null, loadingTrend: false,
 
     // Filters
     txFilter: { type:'', category:'', start_date:'', end_date:'' },
@@ -939,6 +1003,51 @@ function financeApp() {
         this.assets = this.assets.filter(a=>a.id!==id);
         showToast('Asset deleted');
       } catch(e) { showToast('Failed to delete', 'error'); }
+    },
+
+    async openAssetTrend(asset) {
+      this.trendAsset = asset;
+      this.trendData = null;
+      this.showTrendModal = true;
+      this.loadingTrend = true;
+      try {
+        this.trendData = await API.get(`/finance/assets/${asset.id}/trend`);
+        this.$nextTick(() => { this.renderTrendChart(); });
+      } catch(e) { showToast('Could not load trend data', 'error'); }
+      finally { this.loadingTrend = false; }
+    },
+
+    renderTrendChart() {
+      const ctx = document.getElementById('trendChart');
+      if (!ctx || !this.trendData || this.trendData.monthly.length < 2) return;
+      if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
+      const months = this.trendData.monthly.map(r => r.month);
+      const balances = this.trendData.monthly.map(r => r.balance);
+      _trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: months,
+          datasets: [{
+            label: 'Balance',
+            data: balances,
+            borderColor: '#1A1917',
+            backgroundColor: 'rgba(26,25,23,.06)',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: '#1A1917',
+            fill: true,
+            tension: 0.3,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { font: { family:'Inter', size:11 } } },
+            y: { ticks: { font: { family:'Inter', size:11 } } },
+          }
+        }
+      });
     },
 
     // ── Helpers ───────────────────────────────────────────────────────────

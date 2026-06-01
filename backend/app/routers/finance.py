@@ -320,6 +320,62 @@ async def delete_asset(
     await db.commit()
 
 
+@router.get("/assets/{asset_id}/trend")
+async def get_asset_trend(
+    asset_id: int,
+    current_user: User = Depends(require_approved),
+    db: AsyncSession = Depends(get_db),
+):
+    asset = (await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not asset:
+        raise HTTPException(404, "Asset not found")
+
+    try:
+        current_amount = decrypt_amount(asset.amount_encrypted)
+    except Exception:
+        current_amount = 0.0
+
+    txs = (await db.execute(
+        select(Transaction)
+        .where(Transaction.user_id == current_user.id, Transaction.currency == asset.currency)
+        .order_by(Transaction.transaction_date.asc())
+    )).scalars().all()
+
+    # Group net change by month
+    monthly_net: dict[str, float] = defaultdict(float)
+    for t in txs:
+        month = t.transaction_date.strftime("%Y-%m")
+        if t.transaction_type == "income":
+            monthly_net[month] += t.amount
+        elif t.transaction_type == "expense":
+            monthly_net[month] -= t.amount
+
+    months = sorted(monthly_net.keys())
+
+    # Reconstruct historical balances from current amount working backwards
+    total_net = sum(monthly_net.values())
+    baseline = current_amount - total_net
+
+    result = []
+    running = baseline
+    for month in months:
+        running += monthly_net[month]
+        result.append({
+            "month": month,
+            "balance": round(running, 2),
+            "net_change": round(monthly_net[month], 2),
+        })
+
+    # Ensure current month appears with the actual current balance
+    today_month = date.today().strftime("%Y-%m")
+    if today_month not in monthly_net:
+        result.append({"month": today_month, "balance": round(current_amount, 2), "net_change": 0.0})
+
+    return {"currency": asset.currency, "name": asset.name, "monthly": result}
+
+
 # ── Transactions ──────────────────────────────────────────────────────────────
 
 def _tx_to_out(t: Transaction) -> TransactionOut:
