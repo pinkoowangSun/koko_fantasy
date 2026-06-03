@@ -17,4 +17,3 @@ python-dotenv==1.0.1
 cryptography>=42.0.0
 yfinance>=0.2.40
 tavily-python>=0.5.0
-anthropic>=0.40.0

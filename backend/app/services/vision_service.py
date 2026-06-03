@@ -1,11 +1,16 @@
 import base64
 import json
 
-import anthropic
+from openai import AsyncOpenAI
 
 from app.config import settings
 
-_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+_client = AsyncOpenAI(
+    api_key=settings.DEEPSEEK_API_KEY,
+    base_url=settings.DEEPSEEK_BASE_URL,
+)
+
+_MODEL = "deepseek-vl2"
 
 _SYSTEM_PROMPT = (
     "You are a nutrition analyst with vision capabilities. When shown an image:\n\n"
@@ -23,19 +28,15 @@ _SYSTEM_PROMPT = (
 
 async def analyze_image(image_bytes: bytes, caption: str = "") -> dict:
     """
-    Analyze an image with Claude claude-sonnet-4-6 vision.
+    Analyze an image with DeepSeek-VL2 via the OpenAI-compatible API.
     Returns a dict with is_food=True and nutrition fields, or is_food=False and a reply.
     """
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
-    user_content: list[dict] = [
+    user_content = [
         {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": b64,
-            },
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
         },
         {
             "type": "text",
@@ -43,16 +44,17 @@ async def analyze_image(image_bytes: bytes, caption: str = "") -> dict:
         },
     ]
 
-    msg = await _client.messages.create(
-        model="claude-sonnet-4-6",
+    resp = await _client.chat.completions.create(
+        model=_MODEL,
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
         max_tokens=512,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_content}],
     )
 
-    raw = msg.content[0].text.strip()
+    raw = resp.choices[0].message.content.strip()
 
-    # Strip accidental markdown fences
     if raw.startswith("```"):
         parts = raw.split("```")
         raw = parts[1].lstrip("json").strip() if len(parts) > 1 else raw
