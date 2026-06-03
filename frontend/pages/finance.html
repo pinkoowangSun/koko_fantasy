@@ -101,6 +101,14 @@
     .icon-btn.danger:hover { background:#FEE2E2; color:#DC2626; }
 
     .reveal-toggle { font-size:12px; color:#78776E; cursor:pointer; text-decoration:underline; padding:2px 6px; background:none; border:none; font-family:inherit; }
+    .pin-dots { display:flex; gap:10px; justify-content:center; margin:16px 0; }
+    .pin-dot { width:14px; height:14px; border-radius:50%; border:2px solid #E8E7E3; background:#fff; transition:background .1s,border-color .1s; }
+    .pin-dot.filled { background:#1A1917; border-color:#1A1917; }
+    .pin-numpad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; }
+    .pin-key { padding:14px; border-radius:10px; border:1px solid #E8E7E3; font-size:18px; font-weight:600; cursor:pointer; background:#fff; font-family:inherit; transition:background .1s; }
+    .pin-key:hover { background:#F0EFE9; }
+    .pin-key:active { background:#E8E7E3; }
+    .pin-error { color:#dc2626; font-size:12.5px; text-align:center; min-height:18px; margin-top:4px; }
     .spinner { display:inline-block; width:14px; height:14px; border:2px solid #E8E7E3; border-top-color:#1A1917; border-radius:50%; animation:spin .6s linear infinite; vertical-align:middle; }
     @keyframes spin { to { transform:rotate(360deg); } }
 
@@ -132,6 +140,7 @@
       </div>
       <div style="display:flex;gap:8px">
         <button @click="openSettings()" class="btn btn-secondary" title="Default accounts">⚙ Accounts</button>
+        <button @click="setPINInput='';setPINError='';showSetPINModal=true" class="btn btn-secondary" title="Change finance PIN">🔐 PIN</button>
         <button @click="openAddTransaction()" class="btn btn-secondary">+ Transaction</button>
         <button @click="activeTab='goals';openAddGoal()" class="btn btn-primary">+ Goal</button>
       </div>
@@ -412,7 +421,7 @@
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <button @click="revealAssets=!revealAssets" class="reveal-toggle" x-text="revealAssets ? '🙈 Hide amounts' : '👁 Reveal amounts'"></button>
+        <button @click="toggleRevealAll()" class="reveal-toggle" x-text="revealAssets ? '🙈 Hide amounts' : '👁 Reveal amounts'"></button>
         <button @click="openAddAsset()" class="btn btn-primary">+ Add Asset</button>
       </div>
 
@@ -734,6 +743,74 @@
   </div>
 </template>
 
+<!-- ── SET PIN MODAL ──────────────────────────────────────────────────────── -->
+<template x-if="showSetPINModal">
+  <div class="modal-overlay">
+    <div class="modal-box" style="max-width:340px;text-align:center">
+      <div style="font-size:28px;margin-bottom:8px">🔐</div>
+      <div class="modal-title" style="margin-bottom:6px" x-text="hasPIN ? 'Change Finance PIN' : 'Set a Finance PIN'"></div>
+      <p style="font-size:13px;color:#78776E;margin-bottom:20px" x-text="hasPIN ? 'Enter a new 4-digit PIN to protect your financial data.' : 'Set a 4-digit PIN to protect your financial data. You\'ll need it to reveal amounts.'"></p>
+
+      <div class="pin-dots">
+        <template x-for="i in [0,1,2,3]" :key="'sd-'+i">
+          <div class="pin-dot" :class="setPINInput.length > i ? 'filled' : ''"></div>
+        </template>
+      </div>
+      <div class="pin-error" x-text="setPINError"></div>
+
+      <div class="pin-numpad">
+        <template x-for="k in ['1','2','3','4','5','6','7','8','9','','0','⌫']" :key="'sk-'+k">
+          <button class="pin-key" x-text="k" :disabled="k === '' || savingPIN"
+                  :style="k === '' ? 'visibility:hidden' : ''"
+                  @click="k === '⌫' ? setPINInput = setPINInput.slice(0,-1) : (setPINInput.length < 4 && (setPINInput += k)); setPINError = ''">
+          </button>
+        </template>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:20px">
+        <template x-if="hasPIN">
+          <button @click="showSetPINModal=false" class="btn btn-secondary">Cancel</button>
+        </template>
+        <button @click="confirmSetPIN()" class="btn btn-primary" :disabled="setPINInput.length < 4 || savingPIN">
+          <span x-show="savingPIN" class="spinner" style="margin-right:5px"></span>
+          Set PIN
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ── VERIFY PIN MODAL ───────────────────────────────────────────────────── -->
+<template x-if="showVerifyPINModal">
+  <div class="modal-overlay">
+    <div class="modal-box" style="max-width:340px;text-align:center">
+      <div style="font-size:28px;margin-bottom:8px">🔒</div>
+      <div class="modal-title" style="margin-bottom:6px">Enter PIN</div>
+      <p style="font-size:13px;color:#78776E;margin-bottom:20px">Enter your finance PIN to reveal amounts.</p>
+
+      <div class="pin-dots">
+        <template x-for="i in [0,1,2,3]" :key="'vd-'+i">
+          <div class="pin-dot" :class="verifyPINInput.length > i ? 'filled' : ''"></div>
+        </template>
+      </div>
+      <div class="pin-error" x-text="verifyPINError"></div>
+
+      <div class="pin-numpad">
+        <template x-for="k in ['1','2','3','4','5','6','7','8','9','','0','⌫']" :key="'vk-'+k">
+          <button class="pin-key" x-text="k" :disabled="k === '' || verifyingPIN"
+                  :style="k === '' ? 'visibility:hidden' : ''"
+                  @click="onVerifyKeyPress(k)">
+          </button>
+        </template>
+      </div>
+
+      <div style="margin-top:16px">
+        <button @click="showVerifyPINModal=false;verifyPINInput='';verifyPINError=''" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+</template>
+
 <!-- ── DEFAULT ACCOUNTS SETTINGS MODAL ───────────────────────────────────── -->
 <template x-if="showSettingsModal">
   <div class="modal-overlay" @click.self="showSettingsModal=false">
@@ -796,6 +873,14 @@ function financeApp() {
     exchangeRates: {},
     loadingRates: false,
 
+    // PIN state
+    hasPIN: false,
+    pinVerified: false,
+    showSetPINModal: false,
+    showVerifyPINModal: false,
+    setPINInput: '', setPINError: '', savingPIN: false,
+    verifyPINInput: '', verifyPINError: '', verifyingPIN: false,
+
     // Modals
     showTxModal: false, editingTx: null, savingTx: false,
     showGoalModal: false, editingGoal: null, savingGoal: false,
@@ -823,7 +908,7 @@ function financeApp() {
         this.username = me.username || me.telegram_id;
       } catch { window.location.href = '/'; return; }
 
-      await Promise.all([this.loadGoals(), this.loadAssets(), this.loadMonthlySummary(), this.loadSettings()]);
+      await Promise.all([this.loadGoals(), this.loadAssets(), this.loadMonthlySummary(), this.loadSettings(), this.checkPINStatus()]);
     },
 
     logout() { localStorage.removeItem('koko_token'); window.location.href = '/'; },
@@ -1164,7 +1249,73 @@ function financeApp() {
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    toggleRevealAll() { this.revealAssets = !this.revealAssets; },
+    toggleRevealAll() {
+      if (this.revealAssets) {
+        this.revealAssets = false;
+        return;
+      }
+      if (this.pinVerified) {
+        this.revealAssets = true;
+        return;
+      }
+      this.verifyPINInput = '';
+      this.verifyPINError = '';
+      this.showVerifyPINModal = true;
+    },
+
+    async checkPINStatus() {
+      try {
+        const s = await API.get('/finance/pin/status');
+        this.hasPIN = s.has_pin;
+        if (!s.has_pin) this.showSetPINModal = true;
+      } catch {}
+    },
+
+    async confirmSetPIN() {
+      if (this.setPINInput.length < 4) return;
+      this.savingPIN = true;
+      this.setPINError = '';
+      try {
+        await API.post('/finance/pin', { pin: this.setPINInput });
+        this.hasPIN = true;
+        this.pinVerified = true;
+        this.showSetPINModal = false;
+        this.setPINInput = '';
+        showToast('PIN set successfully');
+      } catch(e) {
+        this.setPINError = e.message || 'Failed to set PIN';
+      } finally {
+        this.savingPIN = false;
+      }
+    },
+
+    async onVerifyKeyPress(k) {
+      if (this.verifyingPIN) return;
+      if (k === '⌫') { this.verifyPINInput = this.verifyPINInput.slice(0, -1); this.verifyPINError = ''; return; }
+      if (this.verifyPINInput.length >= 4) return;
+      this.verifyPINInput += k;
+      this.verifyPINError = '';
+      if (this.verifyPINInput.length === 4) {
+        this.verifyingPIN = true;
+        try {
+          const r = await API.post('/finance/pin/verify', { pin: this.verifyPINInput });
+          if (r.valid) {
+            this.pinVerified = true;
+            this.revealAssets = true;
+            this.showVerifyPINModal = false;
+            this.verifyPINInput = '';
+          } else {
+            this.verifyPINError = 'Incorrect PIN. Try again.';
+            this.verifyPINInput = '';
+          }
+        } catch(e) {
+          this.verifyPINError = e.message || 'Verification failed';
+          this.verifyPINInput = '';
+        } finally {
+          this.verifyingPIN = false;
+        }
+      }
+    },
 
     assetCurrencies() {
       return [...new Set(this.assets.map(a => a.currency))].sort();

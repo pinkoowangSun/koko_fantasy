@@ -1,10 +1,11 @@
 """Finance API — goals, assets, transactions, insights, daily summary."""
 import calendar
+import hashlib
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -745,3 +746,43 @@ async def get_insights(
 
     result = await generate_finance_insights(current_user.id, {"transactions": tx_data, "goals": goal_data})
     return FinanceInsightsOut(**result)
+
+
+# ── Finance PIN ───────────────────────────────────────────────────────────────
+
+def _hash_pin(pin: str) -> str:
+    return hashlib.sha256(pin.encode()).hexdigest()
+
+
+@router.get("/pin/status")
+async def get_pin_status(current_user: User = Depends(require_approved)):
+    prefs = current_user.preferences or {}
+    return {"has_pin": bool(prefs.get("finance_pin_hash"))}
+
+
+@router.post("/pin")
+async def set_pin(
+    pin: str = Body(..., embed=True, min_length=4, max_length=8),
+    current_user: User = Depends(require_approved),
+    db: AsyncSession = Depends(get_db),
+):
+    if not pin.isdigit():
+        raise HTTPException(status_code=422, detail="PIN must be digits only")
+    prefs = dict(current_user.preferences or {})
+    prefs["finance_pin_hash"] = _hash_pin(pin)
+    current_user.preferences = prefs
+    current_user.updated_at = datetime.utcnow()
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/pin/verify")
+async def verify_pin(
+    pin: str = Body(..., embed=True),
+    current_user: User = Depends(require_approved),
+):
+    prefs = current_user.preferences or {}
+    stored = prefs.get("finance_pin_hash")
+    if not stored:
+        raise HTTPException(status_code=404, detail="No PIN set")
+    return {"valid": _hash_pin(pin) == stored}
