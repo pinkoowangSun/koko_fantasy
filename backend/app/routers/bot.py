@@ -1549,7 +1549,7 @@ async def bot_delete_finance_goal(body: BotDeleteFinanceGoal, db: AsyncSession =
     return result
 
 
-# ── Media (stub — expanded per domain as features are added) ──────────────────
+# ── Media ─────────────────────────────────────────────────────────────────────
 
 @router.post("/media/{domain}", dependencies=[Depends(_bot_auth)])
 async def bot_media(
@@ -1559,19 +1559,77 @@ async def bot_media(
     caption: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Entry point for photo/file messages requiring a vision LLM.
-    Each domain (nutrition, etc.) will be handled here as features are added.
-    """
     user = await _require_user(telegram_id, db)
-    # Placeholder — returns a graceful fallback until the domain is implemented
+
+    if domain == "nutrition":
+        from app.models.food_log import FoodLog
+        from app.services.vision_service import analyze_image
+
+        image_bytes = await file.read()
+
+        try:
+            result = await analyze_image(image_bytes, caption or "")
+        except Exception as exc:
+            print(f"[vision] analysis failed: {exc}")
+            return {
+                "action": "upload",
+                "domain": domain,
+                "response": "Sorry, I couldn't analyze that image. Please try again!",
+                "data": {},
+            }
+
+        if result.get("is_food"):
+            log = FoodLog(
+                user_id=user.id,
+                is_food=True,
+                dish_name=result.get("dish_name"),
+                calories_kcal=result.get("calories_kcal"),
+                protein_g=result.get("protein_g"),
+                carbs_g=result.get("carbs_g"),
+                fat_g=result.get("fat_g"),
+                fiber_g=result.get("fiber_g"),
+                notes=result.get("notes"),
+                caption=caption,
+                source="telegram",
+            )
+            db.add(log)
+            await db.commit()
+
+            dish = result.get("dish_name") or "Food"
+            cal = result.get("calories_kcal")
+            pro = result.get("protein_g")
+            carbs = result.get("carbs_g")
+            fat = result.get("fat_g")
+            fiber = result.get("fiber_g")
+            notes = result.get("notes") or ""
+
+            lines = [f"🍽 *{dish}*"]
+            if cal:
+                lines.append(f"🔥 ~{cal:.0f} kcal")
+            macros = []
+            if pro:   macros.append(f"Protein: {pro:.0f}g")
+            if carbs: macros.append(f"Carbs: {carbs:.0f}g")
+            if fat:   macros.append(f"Fat: {fat:.0f}g")
+            if fiber: macros.append(f"Fiber: {fiber:.0f}g")
+            if macros:
+                lines.append("💊 " + " · ".join(macros))
+            if notes:
+                lines.append(f"📝 _{notes}_")
+
+            return {
+                "action": "upload",
+                "domain": domain,
+                "response": "\n".join(lines),
+                "data": result,
+            }
+        else:
+            reply = result.get("reply") or "Interesting image! Let me know if there's anything you'd like to discuss."
+            return {"action": "chat", "domain": "", "response": reply, "data": {}}
+
     return {
         "action": "upload",
         "domain": domain,
-        "response": (
-            f"I can see you sent a {domain} image! "
-            "This feature is coming soon — for now, feel free to describe it in text."
-        ),
+        "response": f"I can see you sent a {domain} image! This feature is coming soon.",
         "data": {},
     }
 

@@ -5,10 +5,13 @@ BASE_DIR = Path(__file__).parent.parent.parent
 
 
 class Settings(BaseSettings):
-    # AI
+    # AI — text (DeepSeek)
     DEEPSEEK_API_KEY: str
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-chat"
+
+    # AI — vision (Anthropic Claude)
+    ANTHROPIC_API_KEY: str = ""
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str
