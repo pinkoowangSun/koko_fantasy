@@ -6,11 +6,11 @@ from openai import AsyncOpenAI
 from app.config import settings
 
 _client = AsyncOpenAI(
-    api_key=settings.DEEPSEEK_API_KEY,
-    base_url=settings.DEEPSEEK_BASE_URL,
+    api_key=settings.VISION_API_KEY,
+    base_url=settings.VISION_BASE_URL,
 )
 
-_MODEL = "deepseek-vl2"
+_MODEL = settings.VISION_MODEL
 
 _SYSTEM_PROMPT = (
     "You are a nutrition analyst with vision capabilities. When shown an image:\n\n"
