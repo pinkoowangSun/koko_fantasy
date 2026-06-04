@@ -445,65 +445,103 @@
   @click.self="showLogModal=false">
   <div class="card" style="width:100%;max-width:520px;padding:24px" @keydown.escape.window="showLogModal=false">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-      <h2 style="font-size:16px;font-weight:600">Log Workout</h2>
+      <h2 style="font-size:16px;font-weight:600" x-text="logStep === 'review' ? 'Confirm Calories' : 'Log Workout'"></h2>
       <button @click="showLogModal=false" style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:18px">✕</button>
     </div>
 
-    <!-- Free text -->
-    <div style="margin-bottom:14px">
-      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">
-        What did you do? <span style="color:#ABAAA5">(AI will classify it)</span>
-      </label>
-      <textarea x-model="logText" class="input log-area"
-        placeholder="e.g. ran 5km in 28 min, then 3 sets of push-ups"
-        @keydown.meta.enter="submitLog()" @keydown.ctrl.enter="submitLog()"></textarea>
-      <div style="font-size:11.5px;color:#ABAAA5;margin-top:4px">⌘↵ or Ctrl↵ to submit</div>
-    </div>
-
-    <!-- Date -->
-    <div style="margin-bottom:16px">
-      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Date</label>
-      <input type="date" x-model="logDate" class="input" style="width:auto" />
-    </div>
-
-    <!-- Structured exercises -->
-    <div style="margin-bottom:18px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <label style="font-size:12.5px;font-weight:500;color:#4A4940">Exercises <span style="color:#ABAAA5">(optional)</span></label>
-        <button type="button" @click="addExerciseRow()" class="btn btn-secondary" style="font-size:11.5px;padding:4px 10px">+ Add row</button>
+    <!-- Step 1: entry form -->
+    <div x-show="logStep === 'form'">
+      <!-- Free text -->
+      <div style="margin-bottom:14px">
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">
+          What did you do? <span style="color:#ABAAA5">(AI will classify &amp; estimate calories)</span>
+        </label>
+        <textarea x-model="logText" class="input log-area"
+          placeholder="e.g. ran 5km in 28 min, then 3 sets of push-ups"
+          @keydown.meta.enter="submitLog()" @keydown.ctrl.enter="submitLog()"></textarea>
+        <div style="font-size:11.5px;color:#ABAAA5;margin-top:4px">⌘↵ or Ctrl↵ to submit</div>
       </div>
-      <template x-if="logExercises.length > 0">
-        <div>
-          <div style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px">
-            <div style="font-size:11px;color:#ABAAA5;font-weight:500;padding:0 2px">Name</div>
-            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Sets</div>
-            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Reps</div>
-            <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">kg</div>
-            <div></div>
-          </div>
-          <template x-for="(ex, i) in logExercises" :key="i">
-            <div style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px;align-items:center">
-              <input type="text"   x-model="logExercises[i].exercise_name" class="ex-input" placeholder="Bench Press" />
-              <input type="number" x-model.number="logExercises[i].sets"      class="ex-input" placeholder="3"    min="1"   style="text-align:center" />
-              <input type="text"   x-model="logExercises[i].reps"             class="ex-input" placeholder="8–10"           style="text-align:center" />
-              <input type="number" x-model.number="logExercises[i].weight_kg" class="ex-input" placeholder="60"   step="0.5" style="text-align:center" />
-              <button type="button" @click="logExercises.splice(i,1)"
-                style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:15px;line-height:1;padding:0;text-align:center">✕</button>
+
+      <!-- Date -->
+      <div style="margin-bottom:16px">
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Date</label>
+        <input type="date" x-model="logDate" class="input" style="width:auto" />
+      </div>
+
+      <!-- Structured exercises -->
+      <div style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:12.5px;font-weight:500;color:#4A4940">Exercises <span style="color:#ABAAA5">(optional)</span></label>
+          <button type="button" @click="addExerciseRow()" class="btn btn-secondary" style="font-size:11.5px;padding:4px 10px">+ Add row</button>
+        </div>
+        <template x-if="logExercises.length > 0">
+          <div>
+            <div style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px">
+              <div style="font-size:11px;color:#ABAAA5;font-weight:500;padding:0 2px">Name</div>
+              <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Sets</div>
+              <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">Reps</div>
+              <div style="font-size:11px;color:#ABAAA5;font-weight:500;text-align:center">kg</div>
+              <div></div>
             </div>
+            <template x-for="(ex, i) in logExercises" :key="i">
+              <div style="display:grid;grid-template-columns:2fr 52px 64px 64px 24px;gap:4px;margin-bottom:4px;align-items:center">
+                <input type="text"   x-model="logExercises[i].exercise_name" class="ex-input" placeholder="Bench Press" />
+                <input type="number" x-model.number="logExercises[i].sets"      class="ex-input" placeholder="3"    min="1"   style="text-align:center" />
+                <input type="text"   x-model="logExercises[i].reps"             class="ex-input" placeholder="8–10"           style="text-align:center" />
+                <input type="number" x-model.number="logExercises[i].weight_kg" class="ex-input" placeholder="60"   step="0.5" style="text-align:center" />
+                <button type="button" @click="logExercises.splice(i,1)"
+                  style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:15px;line-height:1;padding:0;text-align:center">✕</button>
+              </div>
+            </template>
+          </div>
+        </template>
+        <template x-if="logExercises.length === 0">
+          <div style="font-size:12px;color:#ABAAA5;padding:4px 0">Add rows to track sets, reps &amp; weight — used in the intensity chart.</div>
+        </template>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button @click="showLogModal=false" class="btn btn-secondary">Cancel</button>
+        <button @click="submitLog()" class="btn btn-primary" :disabled="!logText.trim() || submitting">
+          <span x-show="submitting" class="spinner"></span>
+          <span x-show="submitting" style="margin-left:6px">Analysing…</span>
+          <span x-show="!submitting">Save &amp; Analyse</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: calorie review -->
+    <div x-show="logStep === 'review'">
+      <!-- AI summary box -->
+      <div style="background:#F6F5F2;border-radius:12px;padding:16px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;color:#ABAAA5;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">✨ AI Analysis</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <template x-if="logResult">
+            <span class="cat-badge" :class="'cat-' + (logResult.category || 'mixed')" x-text="(logResult.category || 'mixed').replace(/_/g,' ')"></span>
+          </template>
+          <template x-if="logResult && logResult.duration_min">
+            <span style="font-size:11.5px;color:#ABAAA5">⏱ <span x-text="logResult.duration_min + ' min'"></span></span>
           </template>
         </div>
-      </template>
-      <template x-if="logExercises.length === 0">
-        <div style="font-size:12px;color:#ABAAA5;padding:4px 0">Add rows to track sets, reps &amp; weight — used in the intensity chart.</div>
-      </template>
-    </div>
+        <div x-show="logResult && logResult.summary" style="font-size:13px;color:#4A4940;line-height:1.5" x-text="logResult && logResult.summary"></div>
+      </div>
 
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button @click="showLogModal=false" class="btn btn-secondary">Cancel</button>
-      <button @click="submitLog()" class="btn btn-primary" :disabled="!logText.trim() || submitting">
-        <span x-show="submitting" class="spinner"></span>
-        <span x-show="!submitting">Save</span>
-      </button>
+      <!-- Calories field -->
+      <div style="margin-bottom:24px">
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:4px">
+          🔥 Calories Burnt (kcal)
+        </label>
+        <div style="font-size:11.5px;color:#ABAAA5;margin-bottom:8px">AI estimate — correct if needed (assumes 70 kg body weight).</div>
+        <input type="number" x-model.number="logCaloriesEdit" class="input" placeholder="e.g. 350" min="1"
+          style="width:100%;box-sizing:border-box;font-size:18px;padding:10px 12px;font-weight:600" />
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button @click="confirmCalories()" class="btn btn-primary" :disabled="calorieSaving">
+          <span x-show="calorieSaving" class="spinner"></span>
+          <span x-show="!calorieSaving">Looks Good ✓</span>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -637,6 +675,11 @@ function workoutApp() {
     editSubmitting: false,
     deletingId: null,
     expandedLogs: {},
+    // log modal review step
+    logStep: 'form',   // 'form' | 'review'
+    logResult: null,
+    logCaloriesEdit: null,
+    calorieSaving: false,
 
     get filteredLogs() {
       if (this.timeRange === 'all') return this.logs;
@@ -735,6 +778,9 @@ function workoutApp() {
       this.logText = '';
       this.logDate = _localDateStr();
       this.logExercises = [];
+      this.logStep = 'form';
+      this.logResult = null;
+      this.logCaloriesEdit = null;
       this.showLogModal = true;
     },
 
@@ -759,15 +805,31 @@ function workoutApp() {
             weight_kg: ex.weight_kg || null,
           });
         }
-        this.showLogModal = false;
-        this.showToast('💪 Workout logged!');
+        this.logResult = log;
+        this.logCaloriesEdit = log.calories_burnt;
+        this.logStep = 'review';
         this.logsLoaded = false;
-        if (this.tab === 'workouts') {
-          await this.loadLogs();
-          setTimeout(() => this.initChart(), 80);
-        }
       } catch (e) { this.showToast('Error: ' + e.message); }
       finally { this.submitting = false; }
+    },
+
+    async confirmCalories() {
+      if (this.calorieSaving) return;
+      const edited = this.logCaloriesEdit ? parseInt(this.logCaloriesEdit) : null;
+      if (edited !== this.logResult.calories_burnt) {
+        this.calorieSaving = true;
+        try {
+          await API.patch(`/workout/logs/${this.logResult.id}`, { calories_burnt: edited });
+        } catch (_) {}
+        finally { this.calorieSaving = false; }
+      }
+      this.showLogModal = false;
+      this.logStep = 'form';
+      this.showToast('💪 Workout logged!');
+      if (this.tab === 'workouts') {
+        await this.loadLogs();
+        setTimeout(() => this.initChart(), 80);
+      }
     },
 
     openEdit(log) {

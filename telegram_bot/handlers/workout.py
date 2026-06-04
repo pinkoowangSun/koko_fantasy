@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from telegram_bot.handlers.api import api
 
@@ -35,12 +35,48 @@ async def handle_logworkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         cat = (result.get("category") or "workout").replace("_", " ").title()
         summary = result.get("summary", "")
+        calories = result.get("calories_burnt")
+        log_id = result.get("log_id")
+
         msg = f"✅ Workout logged! ({cat})"
         if summary:
             msg += f"\n_{summary}_"
-        await update.message.reply_text(msg, parse_mode="Markdown")
+
+        if log_id:
+            if calories is not None:
+                msg += f"\n🔥 AI estimated *{calories} kcal* — correct?"
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("✓ Looks right", callback_data=f"cal_ok:{log_id}"),
+                    InlineKeyboardButton("✏️ Correct", callback_data=f"correct_cal:{log_id}"),
+                ]])
+            else:
+                msg += "\n🔥 Calories not estimated — add manually?"
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Add calories", callback_data=f"correct_cal:{log_id}"),
+                ]])
+            await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=keyboard)
+        else:
+            await update.message.reply_text(msg, parse_mode="Markdown")
     except Exception as exc:
         await update.message.reply_text(f"Couldn't log workout: {exc}")
+
+
+async def handle_calorie_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # "cal_ok:<id>" or "correct_cal:<id>"
+
+    if data.startswith("cal_ok:"):
+        await query.answer("✅ Calories recorded!", show_alert=False)
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    # correct_cal:<log_id>
+    log_id = int(data.split(":")[1])
+    context.user_data["awaiting_calorie_log_id"] = log_id
+    await query.answer()
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text("Enter the correct calories (kcal):")
 
 
 async def handle_genplan(update: Update, context: ContextTypes.DEFAULT_TYPE):

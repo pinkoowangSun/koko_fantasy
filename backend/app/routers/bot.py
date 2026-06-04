@@ -360,15 +360,27 @@ async def _handle_create_workout(data: dict, user: User, db: AsyncSession) -> di
         raw_text=data.get("raw_text", ""),
         category=parsed.get("category"),
         summary=parsed.get("summary"),
+        duration_min=parsed.get("duration_min"),
+        calories_burnt=parsed.get("calories_burnt"),
         source="telegram",
     )
     db.add(log)
     await db.commit()
+    await db.refresh(log)
     cat = (log.category or "workout").replace("_", " ").title()
     msg = f"💪 Workout logged! ({cat})"
     if log.summary:
         msg += f"\n_{log.summary}_"
-    return {"response": msg, "data": {"category": log.category, "summary": log.summary}}
+    return {
+        "response": msg,
+        "data": {
+            "log_id": log.id,
+            "category": log.category,
+            "summary": log.summary,
+            "duration_min": log.duration_min,
+            "calories_burnt": log.calories_burnt,
+        },
+    }
 
 
 async def _handle_delete_workout(data: dict, user: User, db: AsyncSession) -> dict:
@@ -1314,6 +1326,24 @@ async def bot_log_workout(body: BotWorkoutLog, db: AsyncSession = Depends(get_db
     )
     asyncio.create_task(refresh_profile_summary(user.id))
     return result["data"] | {"ok": True}
+
+
+class BotCaloriesUpdate(BaseModel):
+    telegram_id: int
+    calories_burnt: int
+
+
+@router.patch("/workout/{log_id}/calories", dependencies=[Depends(_bot_auth)])
+async def bot_update_calories(log_id: int, body: BotCaloriesUpdate, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    log = (await db.execute(
+        select(WorkoutLog).where(WorkoutLog.id == log_id, WorkoutLog.user_id == user.id)
+    )).scalar_one_or_none()
+    if not log:
+        raise HTTPException(404, "Workout log not found")
+    log.calories_burnt = body.calories_burnt
+    await db.commit()
+    return {"ok": True, "calories_burnt": body.calories_burnt}
 
 
 class BotDeleteWorkout(BaseModel):
