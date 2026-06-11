@@ -160,11 +160,11 @@
       <!-- Month stats -->
       <p class="section-label" style="margin-bottom:10px">This Month</p>
       <div class="stat-grid" style="margin-bottom:24px">
-        <template x-for="(val, cur) in summary.income_by_currency" :key="'in-'+cur">
+        <template x-for="(val, cur) in summary.net_by_currency" :key="'net-'+cur">
           <div class="stat-card">
-            <div class="stat-label">Income · <span x-text="cur"></span></div>
-            <div class="stat-val income" x-text="fmt(val)"></div>
-            <div class="stat-sub">total in</div>
+            <div class="stat-label">Net · <span x-text="cur"></span></div>
+            <div class="stat-val" :class="val >= 0 ? 'net-pos' : 'net-neg'" x-text="(val >= 0 ? '+' : '') + fmt(val)"></div>
+            <div class="stat-sub">saved this month</div>
           </div>
         </template>
         <template x-for="(val, cur) in summary.expense_by_currency" :key="'ex-'+cur">
@@ -174,11 +174,11 @@
             <div class="stat-sub">total out</div>
           </div>
         </template>
-        <template x-for="(val, cur) in summary.net_by_currency" :key="'net-'+cur">
+        <template x-for="(val, cur) in summary.income_by_currency" :key="'in-'+cur">
           <div class="stat-card">
-            <div class="stat-label">Net · <span x-text="cur"></span></div>
-            <div class="stat-val" :class="val >= 0 ? 'net-pos' : 'net-neg'" x-text="(val >= 0 ? '+' : '') + fmt(val)"></div>
-            <div class="stat-sub">saved this month</div>
+            <div class="stat-label">Income · <span x-text="cur"></span></div>
+            <div class="stat-val income" x-text="fmt(val)"></div>
+            <div class="stat-sub">total in</div>
           </div>
         </template>
         <template x-if="Object.keys(summary.net_by_currency).length === 0">
