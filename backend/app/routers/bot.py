@@ -725,7 +725,7 @@ async def _handle_create_finance_transaction(data: dict, user: User, db: AsyncSe
     await db.commit()
     sign = "+" if tx.transaction_type == "income" else "-"
     return {
-        "response": f"💰 Logged: {sign}{tx.amount:.0f} {tx.currency} ({tx.category}){f' — {tx.description}' if tx.description else ''}",
+        "response": f"💰 Logged: {sign}{tx.amount:.2f} {tx.currency} ({tx.category}){f' — {tx.description}' if tx.description else ''}",
         "data": {"id": tx.id},
     }
 
@@ -761,7 +761,7 @@ async def _handle_create_finance_goal(data: dict, user: User, db: AsyncSession) 
     await db.commit()
     deadline_str = f" by {goal.deadline}" if goal.deadline else ""
     return {
-        "response": f"🎯 Goal set: *{goal.title}* — {goal.goal_type.replace('_', ' ').title()} {goal.target_amount:.0f} {goal.currency}{deadline_str}",
+        "response": f"🎯 Goal set: *{goal.title}* — {goal.goal_type.replace('_', ' ').title()} {goal.target_amount:.2f} {goal.currency}{deadline_str}",
         "data": {"id": goal.id},
     }
 
@@ -790,10 +790,10 @@ async def _handle_update_finance_goal(data: dict, user: User, db: AsyncSession) 
     updated = []
     if data.get("target_amount") is not None:
         goal.target_amount = float(data["target_amount"])
-        updated.append(f"target → {goal.target_amount:.0f}")
+        updated.append(f"target → {goal.target_amount:.2f}")
     if data.get("manual_current") is not None:
         goal.manual_current = float(data["manual_current"])
-        updated.append(f"current → {goal.manual_current:.0f}")
+        updated.append(f"current → {goal.manual_current:.2f}")
     if data.get("deadline"):
         try:
             goal.deadline = date.fromisoformat(data["deadline"])
@@ -852,7 +852,7 @@ async def _handle_list_finance_transactions(data: dict, user: User, db: AsyncSes
     lines = [f"💳 *Last {len(txs)} transactions (30 days):*"]
     for t in txs:
         sign = "+" if t.transaction_type == "income" else "-"
-        lines.append(f"{sign}{t.amount:.0f} {t.currency} [{t.category}] {t.transaction_date}" + (f" — {t.description}" if t.description else ""))
+        lines.append(f"{sign}{t.amount:.2f} {t.currency} [{t.category}] {t.transaction_date}" + (f" — {t.description}" if t.description else ""))
     return {"response": "\n".join(lines), "data": {}}
 
 
@@ -881,38 +881,82 @@ async def _handle_read_finance_goals(user: User, db: AsyncSession) -> dict:
         lines.append(
             f"\n*{g.title}*\n"
             f"{status_str} [{bar_str}] {out.progress_pct:.0f}%\n"
-            f"{out.current_amount:.0f} / {g.target_amount:.0f} {g.currency}{proj}"
+            f"{out.current_amount:.2f} / {g.target_amount:.2f} {g.currency}{proj}"
         )
     return {"response": "\n".join(lines), "data": {}}
 
 
-async def _handle_generate_finance_insights(user: User, db: AsyncSession) -> dict:
-    thirty_ago = date.today() - timedelta(days=30)
+async def _handle_generate_finance_insights(data: dict, user: User, db: AsyncSession) -> dict:
+    from collections import defaultdict
+    today = _local_date(user)
+
+    # Date range from AI intent; fall back to current calendar month
+    try:
+        start = date.fromisoformat(data["start_date"]) if data.get("start_date") else today.replace(day=1)
+    except ValueError:
+        start = today.replace(day=1)
+    try:
+        end = date.fromisoformat(data["end_date"]) if data.get("end_date") else today
+    except ValueError:
+        end = today
+
     txs = (await db.execute(
         select(Transaction)
-        .where(Transaction.user_id == user.id, Transaction.transaction_date >= thirty_ago)
+        .where(Transaction.user_id == user.id,
+               Transaction.transaction_date >= start,
+               Transaction.transaction_date <= end)
         .order_by(Transaction.transaction_date.asc())
     )).scalars().all()
     goals = (await db.execute(
         select(FinanceGoal).where(FinanceGoal.user_id == user.id, FinanceGoal.status == "active")
     )).scalars().all()
-    tx_data = [{"date": t.transaction_date.isoformat(), "type": t.transaction_type, "amount": t.amount,
-                "currency": t.currency, "category": t.category} for t in txs]
-    goal_data = [{"title": g.title, "type": g.goal_type, "target": g.target_amount, "currency": g.currency} for g in goals]
+
+    period_label = start.strftime("%b %d") + " – " + end.strftime("%b %d, %Y") \
+        if start != today.replace(day=1) or end != today \
+        else today.strftime("%B %Y")
+
+    lines = [f"📊 *{period_label}*", ""]
+
+    if not txs:
+        lines.append("No transactions recorded for this period.")
+        return {"response": "\n".join(lines), "data": {}}
+
+    # Compute totals
+    income: dict[str, float] = defaultdict(float)
+    expense: dict[str, float] = defaultdict(float)
+    cat_totals: dict[str, float] = defaultdict(float)
+    for t in txs:
+        if t.transaction_type == "income":
+            income[t.currency] += t.amount
+        elif t.transaction_type == "expense":
+            expense[t.currency] += t.amount
+            cat_totals[t.category] += t.amount
+
+    for cur in sorted(set(income) | set(expense)):
+        inc, exp = income.get(cur, 0), expense.get(cur, 0)
+        lines.append(f"💸 Spent: *{exp:.2f} {cur}*")
+        if inc:
+            lines.append(f"📥 Income: *{inc:.2f} {cur}*")
+        lines.append(f"{'📈' if inc >= exp else '📉'} Net: {inc - exp:+.2f} {cur}")
+
+    if cat_totals:
+        top = sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)[:3]
+        lines.append("")
+        lines.append("  ·  ".join(f"{c.capitalize()} {a:.2f}" for c, a in top))
+
+    # AI short insight
+    tx_data = [{"type": t.transaction_type, "amount": t.amount, "currency": t.currency,
+                "category": t.category, "date": t.transaction_date.isoformat()} for t in txs]
+    goal_data = [{"title": g.title, "type": g.goal_type, "target": g.target_amount,
+                  "currency": g.currency} for g in goals]
     result = await generate_finance_insights(user.id, {"transactions": tx_data, "goals": goal_data})
-    lines = [
-        "📊 *Finance Insights (last 30 days)*",
-        "",
-        result.get("summary", ""),
-        "",
-        f"📈 Income: {result.get('income_trend', '')}",
-        f"📉 Expenses: {result.get('expense_trend', '')}",
-        f"🎯 Goals: {result.get('goal_status_note', '')}",
-    ]
-    advice = result.get("advice", [])
-    if advice:
-        lines.append("\n💡 *Advice:*")
-        lines.extend(f"• {a}" for a in advice)
+
+    if result.get("insight"):
+        lines.append("")
+        lines.append(result["insight"])
+    for tip in result.get("tips", []):
+        lines.append(f"• {tip}")
+
     return {"response": "\n".join(lines), "data": {}}
 
 
@@ -1000,7 +1044,7 @@ async def _execute_read(action: str, domain: str, data: dict, user: User, db: As
             elif action == "read":
                 return await _handle_read_finance_goals(user, db)
             elif action == "generate":
-                return await _handle_generate_finance_insights(user, db)
+                return await _handle_generate_finance_insights(data, user, db)
     except Exception as exc:
         print(f"[bot] execute_read failed {action}+{domain}: {exc}")
 
@@ -1512,7 +1556,7 @@ async def bot_finance_summary(telegram_id: int, db: AsyncSession = Depends(get_d
     lines = [f"💰 *Finance — {today.strftime('%B %Y')}*"]
     for cur in all_curs:
         net = income.get(cur, 0) - expense.get(cur, 0)
-        lines.append(f"{cur}: +{income.get(cur, 0):.0f} in / -{expense.get(cur, 0):.0f} out / net {net:+.0f}")
+        lines.append(f"{cur}: +{income.get(cur, 0):.2f} in / -{expense.get(cur, 0):.2f} out / net {net:+.2f}")
     if not txs:
         lines.append("No transactions this month yet.")
     lines.append(f"\n{len(txs)} transaction(s) recorded.")

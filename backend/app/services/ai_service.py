@@ -479,59 +479,33 @@ async def parse_finance_goal(user_id: int, text: str, user_timezone: str = "UTC"
 
 
 async def generate_finance_insights(user_id: int, summary_data: dict) -> dict:
-    """Generate LLM-powered finance insights from 30-day transaction data."""
+    """Generate a short AI insight + 2 tips from transaction data."""
     if not summary_data.get("transactions"):
-        return {
-            "summary": "No transactions recorded in the past 30 days. Start logging your income and expenses to get personalised insights!",
-            "top_categories": [],
-            "income_trend": "No data available.",
-            "expense_trend": "No data available.",
-            "goal_status_note": "Add financial goals to track your progress.",
-            "advice": ["Log your first transaction to get started."],
-        }
+        return {"insight": "", "tips": []}
 
-    data_str = json.dumps(summary_data, indent=2)
+    data_str = json.dumps(summary_data)
     prompt = f"""\
-You are a personal finance advisor. Analyse the following 30-day financial data and return structured insights.
+Analyse this financial data and return JSON with exactly two fields:
+- "insight": one sharp sentence about the spending pattern (be specific, mention categories or amounts)
+- "tips": list of exactly 2 short actionable tips
 
-DATA:
-{data_str}
+DATA: {data_str}
 
-Return ONLY this JSON (no markdown fences):
-{{
-  "summary": "<2-3 sentence overview of the user's financial health this month>",
-  "top_categories": ["<top spending category 1>", "<top spending category 2>", "<top spending category 3>"],
-  "income_trend": "<1 sentence about income pattern>",
-  "expense_trend": "<1 sentence about spending pattern and any concerns>",
-  "goal_status_note": "<1 sentence about goal progress, or encouragement if no goals>",
-  "advice": ["<actionable advice 1>", "<actionable advice 2>", "<actionable advice 3>"]
-}}
+Return ONLY valid JSON, no markdown fences."""
 
-Rules:
-- Be specific — reference actual amounts, categories, and patterns from the data
-- advice: concrete next steps the user can take this week (exactly 3 items)
-- Keep a positive but honest tone
-"""
     resp = await _client.chat.completions.create(
         model=settings.DEEPSEEK_MODEL,
         messages=[
-            {"role": "system", "content": "You are a personal finance advisor. Output valid JSON only."},
+            {"role": "system", "content": "You are a concise personal finance advisor. Output valid JSON only."},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.5,
+        temperature=0.4,
         response_format={"type": "json_object"},
     )
     try:
         return json.loads(resp.choices[0].message.content)
     except json.JSONDecodeError:
-        return {
-            "summary": "Unable to generate insights at this time. Please try again.",
-            "top_categories": [],
-            "income_trend": "Analysis unavailable.",
-            "expense_trend": "Analysis unavailable.",
-            "goal_status_note": "Analysis unavailable.",
-            "advice": ["Please try again later."],
-        }
+        return {"insight": "", "tips": []}
 
 
 _WEEK_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
