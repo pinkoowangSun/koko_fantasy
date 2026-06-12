@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.food_log import FoodLog
 from app.models.memory import MemoryItem
 from app.models.user import User
 from app.models.workout import WorkoutExercise, WorkoutLog, WorkoutPlan
@@ -313,6 +314,41 @@ async def generate_plan(
         if m.key.strip().lower() != "workout"
     )
 
+    # Nutrition context: average daily intake vs. workout burn over the last 14 days
+    nutrition_window = 14
+    food = (await db.execute(
+        select(FoodLog).where(
+            FoodLog.user_id == current_user.id,
+            FoodLog.is_food.is_(True),
+            FoodLog.logged_at >= datetime.utcnow() - timedelta(days=nutrition_window + 1),
+        )
+    )).scalars().all()
+    nutrition_context = ""
+    if food:
+        try:
+            tz = ZoneInfo(current_user.timezone or "UTC")
+        except Exception:
+            tz = ZoneInfo("UTC")
+        day_in: dict = {}
+        day_protein: dict = {}
+        for f in food:
+            d = f.logged_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz).date()
+            day_in[d] = day_in.get(d, 0) + (f.calories_kcal or 0)
+            day_protein[d] = day_protein.get(d, 0) + (f.protein_g or 0)
+        n_days = len(day_in)
+        avg_in = sum(day_in.values()) / n_days
+        avg_protein = sum(day_protein.values()) / n_days
+        recent_burn = [
+            l.calories_burnt or 0 for l in logs
+            if l.log_date >= today - timedelta(days=nutrition_window)
+        ]
+        avg_out = sum(recent_burn) / nutrition_window
+        nutrition_context = (
+            f"Average daily intake ({n_days} logged days): ~{avg_in:.0f} kcal, ~{avg_protein:.0f} g protein. "
+            f"Average workout burn: ~{avg_out:.0f} kcal/day across the window. "
+            f"Intake minus exercise burn: ~{avg_in - avg_out:+.0f} kcal/day (excludes BMR)."
+        )
+
     # Determine which days still need generating (today + future)
     _day_names = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     today_idx = today.weekday()  # 0=Mon, 6=Sun
@@ -338,6 +374,7 @@ async def generate_plan(
         current_user.id, logs_context, user_memory, workout_pref,
         days_to_generate=days_to_generate if today_idx > 0 else None,
         user_timezone=current_user.timezone or "UTC",
+        nutrition_context=nutrition_context,
     )
 
     merged_plan = {**past_plan, **result.get("plan", {})}

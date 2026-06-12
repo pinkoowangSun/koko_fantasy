@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, bot, briefing, calendar, chat, documents, finance, journal, memory, search, tasks, users, workout
+from app.routers import auth, bot, briefing, calendar, chat, documents, finance, journal, memory, nutrition, search, tasks, users, workout
 from app.services.reminder_service import start_scheduler, stop_scheduler
 
 FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
@@ -33,7 +33,7 @@ app.add_middleware(
 )
 
 # ── API routes ────────────────────────────────────────────────────────────────
-for r in [auth, tasks, journal, documents, memory, briefing, search, users, calendar, bot, workout, finance, chat]:
+for r in [auth, tasks, journal, documents, memory, briefing, search, users, calendar, bot, workout, finance, chat, nutrition]:
     app.include_router(r.router, prefix="/api")
 
 

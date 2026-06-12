@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Koko — Workout</title>
+  <title>Koko — Health</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -88,10 +88,11 @@
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Workout</h1>
+        <h1 class="page-title">Health</h1>
         <p style="font-size:13px;color:#78776E;margin-top:2px" x-text="weekLabel"></p>
       </div>
       <div style="display:flex;gap:8px">
+        <button @click="openFoodModal()" class="btn btn-secondary">+ Log Food</button>
         <button @click="openLogModal()" class="btn btn-secondary">+ Log Workout</button>
         <button @click="generatePlan()" class="btn btn-primary" :disabled="generating">
           <span x-show="generating" class="spinner"></span>
@@ -106,20 +107,35 @@
       <span x-text="toast"></span>
     </div>
 
-    <!-- Preference hint -->
-    <div style="font-size:12.5px;color:#78776E;background:#F6F5F2;border-radius:9px;padding:9px 14px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
-      <span>💡</span>
-      <span>AI plans use your history + preferences. Set your goals on <a href="/profile" style="color:#1A1917;font-weight:500;text-decoration:underline">Profile</a> with key <strong>workout</strong> — e.g. <em>"weight loss, 4 days/week, no equipment"</em>.</span>
+    <!-- Energy overview — always visible across tabs, collapsible -->
+    <div class="card" style="margin-bottom:20px;padding:16px 18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" @click="toggleOverview()">
+        <div>
+          <div class="section-label">📊 Energy Overview — last 14 days</div>
+          <div x-show="!overviewCollapsed" style="font-size:11.5px;color:#ABAAA5;margin-top:3px">Bars = calories in (food) / out (workouts) · line = net (in − out)</div>
+        </div>
+        <span style="color:#ABAAA5;font-size:13px" x-text="overviewCollapsed ? '▼' : '▲'"></span>
+      </div>
+      <div x-show="!overviewCollapsed" style="margin-top:12px">
+        <canvas id="chartEnergy" style="max-height:220px"></canvas>
+      </div>
     </div>
 
-    <!-- Tab bar: 2 tabs only -->
+    <!-- Tab bar -->
     <div class="tab-bar">
-      <button class="tab-btn" :class="{active:tab==='plan'}"     @click="switchTab('plan')">Weekly Plan</button>
-      <button class="tab-btn" :class="{active:tab==='workouts'}" @click="switchTab('workouts')">Workouts</button>
+      <button class="tab-btn" :class="{active:tab==='workouts'}"  @click="switchTab('workouts')">Workout</button>
+      <button class="tab-btn" :class="{active:tab==='nutrition'}" @click="switchTab('nutrition')">Nutrition</button>
+      <button class="tab-btn" :class="{active:tab==='plan'}"      @click="switchTab('plan')">AI Plan</button>
     </div>
 
-    <!-- ══ PLAN TAB ══════════════════════════════════════════════ -->
+    <!-- ══ AI PLAN TAB ═══════════════════════════════════════════ -->
     <div x-show="tab==='plan'">
+
+      <!-- Preference hint -->
+      <div style="font-size:12.5px;color:#78776E;background:#F6F5F2;border-radius:9px;padding:9px 14px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
+        <span>💡</span>
+        <span>AI plans use your workout history, food logs + preferences. Set your goals on <a href="/profile" style="color:#1A1917;font-weight:500;text-decoration:underline">Profile</a> with key <strong>workout</strong> — e.g. <em>"weight loss, 4 days/week, no equipment"</em>.</span>
+      </div>
 
       <template x-if="loadingPlan">
         <div class="card" style="text-align:center;padding:48px;color:#ABAAA5">
@@ -436,6 +452,84 @@
       </template>
     </div>
 
+    <!-- ══ NUTRITION TAB ═════════════════════════════════════════ -->
+    <div x-show="tab==='nutrition'">
+
+      <template x-if="loadingNutrition">
+        <div class="card" style="text-align:center;padding:48px;color:#ABAAA5">
+          <div class="spinner" style="width:24px;height:24px;margin:0 auto 12px"></div>
+          <p style="font-size:13.5px">Loading…</p>
+        </div>
+      </template>
+
+      <template x-if="!loadingNutrition">
+        <div>
+
+          <!-- Today's intake -->
+          <div class="card" style="margin-bottom:14px">
+            <div class="section-label">Today's Intake</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+              <span class="cat-badge" style="background:#1A1917;color:#fff">🍽 <span x-text="Math.round(todayNutrition.calories_in)"></span> kcal</span>
+              <span class="cat-badge" style="background:#D1FAE5;color:#065F46">Protein <span x-text="Math.round(todayNutrition.protein_g)"></span> g</span>
+              <span class="cat-badge" style="background:#DBEAFE;color:#1D4ED8">Carbs <span x-text="Math.round(todayNutrition.carbs_g)"></span> g</span>
+              <span class="cat-badge" style="background:#FEF3C7;color:#92400E">Fat <span x-text="Math.round(todayNutrition.fat_g)"></span> g</span>
+              <span class="cat-badge" style="background:#EDE9FE;color:#4C1D95">Fiber <span x-text="Math.round(todayNutrition.fiber_g)"></span> g</span>
+              <span style="font-size:11.5px;color:#ABAAA5;align-self:center" x-text="todayNutrition.meals + (todayNutrition.meals === 1 ? ' meal logged' : ' meals logged')"></span>
+            </div>
+          </div>
+
+          <!-- Intake chart -->
+          <div class="card" style="margin-bottom:14px">
+            <div style="margin-bottom:10px">
+              <div class="section-label">Calorie Intake — last 14 days</div>
+              <div style="font-size:11.5px;color:#ABAAA5;margin-top:3px">Stacked bars = kcal from protein / carbs / fat (4 / 4 / 9 kcal per gram)</div>
+            </div>
+            <template x-if="!hasIntakeData">
+              <div style="text-align:center;padding:40px;color:#ABAAA5;font-size:13.5px">No food logged in the last 14 days.</div>
+            </template>
+            <canvas id="chartIntake" x-show="hasIntakeData" style="max-height:240px"></canvas>
+          </div>
+
+          <!-- Food log -->
+          <div class="section-label" style="margin-bottom:10px">Food Log</div>
+
+          <template x-if="foodLogs.length === 0">
+            <div class="card" style="text-align:center;padding:40px;color:#ABAAA5">
+              <p style="font-size:14px">No food logged yet.</p>
+              <p style="font-size:13px;margin-top:6px">Send a meal photo to the Telegram bot 📷 — calories &amp; macros are estimated automatically.</p>
+            </div>
+          </template>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <template x-for="f in foodLogs" :key="f.id">
+              <div class="history-item" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px">
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:12.5px;font-weight:600;color:#1A1917" x-text="fmtLogDate(f.log_date)"></span>
+                    <span style="font-size:13px;color:#4A4940" x-text="f.dish_name || 'Food'"></span>
+                    <template x-if="f.calories_kcal != null">
+                      <span style="font-size:11.5px;color:#ABAAA5">🔥 <span x-text="Math.round(f.calories_kcal) + ' kcal'"></span></span>
+                    </template>
+                  </div>
+                  <div style="font-size:11.5px;color:#ABAAA5;margin-top:3px" x-text="macroLine(f)"></div>
+                </div>
+                <div x-show="deletingFoodId !== f.id" style="display:flex;gap:2px;flex-shrink:0">
+                  <button class="icon-btn" @click="openFoodEdit(f)" title="Edit">✏️</button>
+                  <button class="icon-btn danger" @click="deletingFoodId = f.id" title="Delete">🗑️</button>
+                </div>
+                <div x-show="deletingFoodId === f.id" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                  <span style="font-size:12px;color:#DC2626">Delete?</span>
+                  <button class="btn btn-secondary" style="font-size:11.5px;padding:3px 10px" @click="deletingFoodId = null">Cancel</button>
+                  <button class="btn" style="font-size:11.5px;padding:3px 10px;background:#DC2626;color:#fff;border-color:#DC2626" @click="deleteFood(f.id)">Delete</button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+        </div>
+      </template>
+    </div>
+
   </main>
 </div>
 
@@ -546,6 +640,100 @@
   </div>
 </div>
 
+<!-- ══ LOG FOOD MODAL ══════════════════════════════════════════════ -->
+<div x-show="showFoodModal" x-cloak
+  style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto"
+  @click.self="showFoodModal=false">
+  <div class="card" style="width:100%;max-width:520px;padding:24px" @keydown.escape.window="showFoodModal=false">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 style="font-size:16px;font-weight:600">Log Food</h2>
+      <button @click="showFoodModal=false" style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:18px">✕</button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">
+        What did you eat? <span style="color:#ABAAA5">(AI will estimate calories &amp; macros)</span>
+      </label>
+      <textarea x-model="foodText" class="input log-area"
+        placeholder="e.g. chicken rice with extra egg, kopi C kosong"
+        @keydown.meta.enter="submitFood()" @keydown.ctrl.enter="submitFood()"></textarea>
+      <div style="font-size:11.5px;color:#ABAAA5;margin-top:4px">⌘↵ or Ctrl↵ to submit · or send a meal photo to the Telegram bot 📷</div>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Date</label>
+      <input type="date" x-model="foodDate" class="input" style="width:auto" />
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button @click="showFoodModal=false" class="btn btn-secondary">Cancel</button>
+      <button @click="submitFood()" class="btn btn-primary" :disabled="!foodText.trim() || foodSubmitting">
+        <span x-show="foodSubmitting" class="spinner"></span>
+        <span x-show="foodSubmitting" style="margin-left:6px">Analysing…</span>
+        <span x-show="!foodSubmitting">Save &amp; Analyse</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ EDIT FOOD MODAL ═════════════════════════════════════════════ -->
+<div x-show="showFoodEditModal" x-cloak
+  style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto"
+  @click.self="showFoodEditModal=false">
+  <div class="card" style="width:100%;max-width:440px;padding:24px" @keydown.escape.window="showFoodEditModal=false">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 style="font-size:16px;font-weight:600">Edit Food Log</h2>
+      <button @click="showFoodEditModal=false" style="background:none;border:none;cursor:pointer;color:#ABAAA5;font-size:18px">✕</button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">
+        Description <span style="color:#ABAAA5">(AI re-analyses on save if changed)</span>
+      </label>
+      <textarea x-model="foodEdit.description" class="input log-area" style="min-height:60px"
+        placeholder="e.g. chicken rice with extra egg, large portion"></textarea>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Dish</label>
+      <input type="text" x-model="foodEdit.dish_name" class="input" style="width:100%;box-sizing:border-box" />
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">🔥 Calories (kcal)</label>
+      <input type="number" x-model.number="foodEdit.calories_kcal" class="input" min="0"
+        style="width:100%;box-sizing:border-box;font-size:16px;font-weight:600" />
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+      <div>
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Protein (g)</label>
+        <input type="number" x-model.number="foodEdit.protein_g" class="input" min="0" step="0.5" style="width:100%;box-sizing:border-box" />
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Carbs (g)</label>
+        <input type="number" x-model.number="foodEdit.carbs_g" class="input" min="0" step="0.5" style="width:100%;box-sizing:border-box" />
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Fat (g)</label>
+        <input type="number" x-model.number="foodEdit.fat_g" class="input" min="0" step="0.5" style="width:100%;box-sizing:border-box" />
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:500;color:#4A4940;display:block;margin-bottom:6px">Fiber (g)</label>
+        <input type="number" x-model.number="foodEdit.fiber_g" class="input" min="0" step="0.5" style="width:100%;box-sizing:border-box" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button @click="showFoodEditModal=false" class="btn btn-secondary">Cancel</button>
+      <button @click="saveFoodEdit()" class="btn btn-primary" :disabled="foodEditSaving">
+        <span x-show="foodEditSaving" class="spinner"></span>
+        <span x-show="!foodEditSaving">Save</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ EDIT WORKOUT MODAL ══════════════════════════════════════════ -->
 <div x-show="showEditModal" x-cloak
   style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto"
@@ -632,7 +820,10 @@ function _localDateStr(d = new Date()) {
 }
 
 function workoutApp() {
-  let _chart = null; // single chart instance, outside Alpine's reactive scope
+  // chart instances, outside Alpine's reactive scope
+  let _chart = null;
+  let _energyChart = null;
+  let _intakeChart = null;
 
   const CAT = {
     cardio:      { bg: '#DBEAFE', fg: '#1D4ED8' },
@@ -644,12 +835,34 @@ function workoutApp() {
     rest:        { bg: '#F3F4F6', fg: '#6B7280' },
   };
 
+  const MACRO = {
+    protein: { bg: '#D1FAE5', fg: '#065F46', kcalPerG: 4 },
+    carbs:   { bg: '#DBEAFE', fg: '#1D4ED8', kcalPerG: 4 },
+    fat:     { bg: '#FEF3C7', fg: '#92400E', kcalPerG: 9 },
+  };
+
   return {
     username: '',
-    tab: 'plan',
+    tab: 'workouts',
     plan: null,
+    planLoaded: false,
     logs: [],
-    loadingPlan: true,
+    loadingPlan: false,
+    // nutrition / energy overview
+    energyDays: [],
+    foodLogs: [],
+    loadingNutrition: false,
+    deletingFoodId: null,
+    showFoodModal: false,
+    foodText: '',
+    foodDate: _localDateStr(),
+    foodSubmitting: false,
+    showFoodEditModal: false,
+    foodEditId: null,
+    foodEdit: { description: '', dish_name: '', calories_kcal: null, protein_g: null, carbs_g: null, fat_g: null, fiber_g: null },
+    foodEditOrigDesc: '',
+    foodEditSaving: false,
+    overviewCollapsed: localStorage.getItem('koko_overview_collapsed') === '1',
     loadingLogs: false,
     logsLoaded: false,
     generating: false,
@@ -719,19 +932,34 @@ function workoutApp() {
       return `Week of ${fmt(mon)} – ${fmt(sun)}`;
     },
 
+    get todayNutrition() {
+      const t = _localDateStr();
+      return this.energyDays.find(d => d.date === t) ||
+        { calories_in: 0, calories_out: 0, net: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, meals: 0 };
+    },
+
+    get hasIntakeData() {
+      return this.energyDays.some(d => d.calories_in > 0);
+    },
+
     async init() {
       requireAuth();
       try { const me = await API.get('/users/me'); this.username = me.username || ''; } catch {}
-      await this.loadPlan();
+      await Promise.all([this.loadLogs(), this.loadNutrition()]);
+      setTimeout(() => { this.initChart(); this.initEnergyChart(); }, 80);
     },
 
     async switchTab(t) {
       this.tab = t;
-      if (t === 'workouts' && !this.logsLoaded) {
-        await this.loadLogs();
+      if (t === 'plan' && !this.planLoaded) {
+        await this.loadPlan();
       }
       if (t === 'workouts') {
+        if (!this.logsLoaded) await this.loadLogs();
         setTimeout(() => this.initChart(), 80);
+      }
+      if (t === 'nutrition') {
+        setTimeout(() => this.initIntakeChart(), 80);
       }
     },
 
@@ -739,7 +967,121 @@ function workoutApp() {
       this.loadingPlan = true;
       try   { this.plan = await API.get('/workout/plan'); }
       catch { this.plan = null; }
-      finally { this.loadingPlan = false; }
+      finally { this.loadingPlan = false; this.planLoaded = true; }
+    },
+
+    async loadNutrition() {
+      if (this.loadingNutrition) return;
+      this.loadingNutrition = true;
+      try {
+        const [summary, logs] = await Promise.all([
+          API.get('/nutrition/summary?days=14'),
+          API.get('/nutrition/logs?days=30'),
+        ]);
+        this.energyDays = summary;
+        this.foodLogs = logs;
+      } catch (e) { this.showToast('Nutrition load failed: ' + e.message); }
+      finally { this.loadingNutrition = false; }
+    },
+
+    // Re-fetch the overview after anything that changes calories in/out
+    async refreshEnergy() {
+      try { this.energyDays = await API.get('/nutrition/summary?days=14'); } catch {}
+      setTimeout(() => this.initEnergyChart(), 80);
+    },
+
+    toggleOverview() {
+      this.overviewCollapsed = !this.overviewCollapsed;
+      localStorage.setItem('koko_overview_collapsed', this.overviewCollapsed ? '1' : '0');
+      if (!this.overviewCollapsed) {
+        setTimeout(() => { _energyChart ? _energyChart.resize() : this.initEnergyChart(); }, 60);
+      }
+    },
+
+    openFoodModal() {
+      this.foodText = '';
+      this.foodDate = _localDateStr();
+      this.showFoodModal = true;
+    },
+
+    async submitFood() {
+      if (!this.foodText.trim() || this.foodSubmitting) return;
+      this.foodSubmitting = true;
+      try {
+        const log = await API.post('/nutrition/logs', {
+          description: this.foodText.trim(),
+          log_date: this.foodDate || null,
+        });
+        this.showFoodModal = false;
+        const kcal = log.calories_kcal != null ? ` — ~${Math.round(log.calories_kcal)} kcal` : '';
+        this.showToast(`🍽 ${log.dish_name || 'Food'}${kcal} logged!`);
+        await this.loadNutrition();
+        setTimeout(() => { this.initEnergyChart(); this.initIntakeChart(); }, 80);
+      } catch (e) { this.showToast('Error: ' + e.message); }
+      finally { this.foodSubmitting = false; }
+    },
+
+    openFoodEdit(f) {
+      this.foodEditId = f.id;
+      this.foodEdit = {
+        description: f.description || '',
+        dish_name: f.dish_name || '',
+        calories_kcal: f.calories_kcal,
+        protein_g: f.protein_g,
+        carbs_g: f.carbs_g,
+        fat_g: f.fat_g,
+        fiber_g: f.fiber_g,
+      };
+      this.foodEditOrigDesc = f.description || '';
+      this.showFoodEditModal = true;
+    },
+
+    async saveFoodEdit() {
+      if (this.foodEditSaving) return;
+      this.foodEditSaving = true;
+      try {
+        const desc = this.foodEdit.description.trim();
+        const descChanged = desc && desc !== this.foodEditOrigDesc;
+        const num = v => (v === '' || v == null) ? null : v;
+        // when the description changed, let the AI re-analyse instead of sending manual values
+        const payload = descChanged ? { description: desc } : {
+          dish_name: this.foodEdit.dish_name.trim() || null,
+          calories_kcal: num(this.foodEdit.calories_kcal),
+          protein_g: num(this.foodEdit.protein_g),
+          carbs_g: num(this.foodEdit.carbs_g),
+          fat_g: num(this.foodEdit.fat_g),
+          fiber_g: num(this.foodEdit.fiber_g),
+        };
+        const updated = await API.patch(`/nutrition/logs/${this.foodEditId}`, payload);
+        this.foodLogs = this.foodLogs.map(l => l.id === updated.id ? updated : l);
+        this.showFoodEditModal = false;
+        this.showToast(descChanged && updated.calories_kcal != null
+          ? `✨ Re-analysed: ${updated.dish_name || 'Food'} — ~${Math.round(updated.calories_kcal)} kcal`
+          : '✅ Food log updated!');
+        await this.refreshEnergy();
+        setTimeout(() => this.initIntakeChart(), 80);
+      } catch (e) { this.showToast('Error: ' + e.message); }
+      finally { this.foodEditSaving = false; }
+    },
+
+    async deleteFood(id) {
+      try {
+        await API.delete(`/nutrition/logs/${id}`);
+        this.deletingFoodId = null;
+        this.foodLogs = this.foodLogs.filter(l => l.id !== id);
+        this.showToast('🗑️ Food log deleted.');
+        await this.refreshEnergy();
+        setTimeout(() => this.initIntakeChart(), 80);
+      } catch (e) { this.showToast('Error: ' + e.message); }
+    },
+
+    macroLine(l) {
+      const parts = [];
+      if (l.protein_g != null) parts.push(`P ${Math.round(l.protein_g)}g`);
+      if (l.carbs_g != null)   parts.push(`C ${Math.round(l.carbs_g)}g`);
+      if (l.fat_g != null)     parts.push(`F ${Math.round(l.fat_g)}g`);
+      if (l.fiber_g != null)   parts.push(`Fib ${Math.round(l.fiber_g)}g`);
+      return parts.join(' · ');
     },
 
     async loadLogs() {
@@ -768,6 +1110,7 @@ function workoutApp() {
       this.generating = true;
       try {
         this.plan = await API.post('/workout/plan/generate', {});
+        this.planLoaded = true;
         this.showToast('✨ AI workout plan generated!');
         this.tab = 'plan';
       } catch (e) { this.showToast('Failed to generate: ' + e.message); }
@@ -830,6 +1173,7 @@ function workoutApp() {
         await this.loadLogs();
         setTimeout(() => this.initChart(), 80);
       }
+      await this.refreshEnergy();
     },
 
     openEdit(log) {
@@ -886,6 +1230,7 @@ function workoutApp() {
         this.logsLoaded = false;
         await this.loadLogs();
         setTimeout(() => this.initChart(), 80);
+        await this.refreshEnergy();
       } catch (e) { this.showToast('Error: ' + e.message); }
       finally { this.editSubmitting = false; }
     },
@@ -897,6 +1242,7 @@ function workoutApp() {
         this.deletingId = null;
         this.showToast('🗑️ Workout deleted.');
         setTimeout(() => this.initChart(), 80);
+        await this.refreshEnergy();
       } catch (e) { this.showToast('Error: ' + e.message); }
     },
 
@@ -969,6 +1315,143 @@ function workoutApp() {
               grid: { color: '#F0EFE9' },
             },
             x: {
+              ticks: { font: { size: 11 }, maxRotation: 40 },
+              grid: { display: false },
+            },
+          },
+        },
+      });
+    },
+
+    initEnergyChart() {
+      if (typeof Chart === 'undefined' || this.overviewCollapsed || this.energyDays.length === 0) return;
+      const el = document.getElementById('chartEnergy');
+      if (!el) return;
+
+      if (_energyChart) { _energyChart.destroy(); _energyChart = null; }
+
+      const labels = this.energyDays.map(d => this.fmtLogDate(d.date));
+
+      _energyChart = new Chart(el, {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'line',
+              label: 'Net',
+              data: this.energyDays.map(d => Math.round(d.net)),
+              borderColor: '#1A1917',
+              backgroundColor: '#1A1917',
+              borderWidth: 2,
+              pointRadius: 2.5,
+              tension: 0.3,
+              order: 0,
+            },
+            {
+              type: 'bar',
+              label: 'In (food)',
+              data: this.energyDays.map(d => Math.round(d.calories_in)),
+              backgroundColor: MACRO.protein.bg,
+              borderColor: MACRO.protein.fg,
+              borderWidth: 1.5,
+              borderRadius: 5,
+              order: 1,
+            },
+            {
+              type: 'bar',
+              label: 'Out (workouts)',
+              data: this.energyDays.map(d => Math.round(d.calories_out)),
+              backgroundColor: MACRO.carbs.bg,
+              borderColor: MACRO.carbs.fg,
+              borderWidth: 1.5,
+              borderRadius: 5,
+              order: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'end',
+              labels: { font: { size: 11, family: 'Inter' }, boxWidth: 12, padding: 12 },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} kcal`,
+              },
+            },
+          },
+          scales: {
+            y: {
+              ticks: { font: { size: 11 } },
+              title: { display: true, text: 'kcal', font: { size: 11 } },
+              grid: { color: '#F0EFE9' },
+            },
+            x: {
+              ticks: { font: { size: 11 }, maxRotation: 40 },
+              grid: { display: false },
+            },
+          },
+        },
+      });
+    },
+
+    initIntakeChart() {
+      if (typeof Chart === 'undefined' || !this.hasIntakeData) return;
+      const el = document.getElementById('chartIntake');
+      if (!el) return;
+
+      if (_intakeChart) { _intakeChart.destroy(); _intakeChart = null; }
+
+      const labels = this.energyDays.map(d => this.fmtLogDate(d.date));
+      const macroDataset = (key, label) => ({
+        label,
+        data: this.energyDays.map(d => Math.round((d[key + '_g'] || 0) * MACRO[key].kcalPerG)),
+        grams: this.energyDays.map(d => Math.round(d[key + '_g'] || 0)),
+        backgroundColor: MACRO[key].bg,
+        borderColor: MACRO[key].fg,
+        borderWidth: 1.5,
+        borderRadius: 5,
+      });
+
+      _intakeChart = new Chart(el, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            macroDataset('protein', 'Protein'),
+            macroDataset('carbs', 'Carbs'),
+            macroDataset('fat', 'Fat'),
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'end',
+              labels: { font: { size: 11, family: 'Inter' }, boxWidth: 12, padding: 12 },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} kcal (${ctx.dataset.grams[ctx.dataIndex]} g)`,
+              },
+            },
+          },
+          scales: {
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: { font: { size: 11 } },
+              title: { display: true, text: 'kcal', font: { size: 11 } },
+              grid: { color: '#F0EFE9' },
+            },
+            x: {
+              stacked: true,
               ticks: { font: { size: 11 }, maxRotation: 40 },
               grid: { display: false },
             },

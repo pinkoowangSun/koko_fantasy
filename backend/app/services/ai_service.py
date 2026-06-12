@@ -327,6 +327,40 @@ async def parse_workout_log(user_id: int, text: str) -> dict:
         return {"category": "mixed", "summary": text[:200], "duration_min": None, "calories_burnt": None, "exercises": []}
 
 
+async def parse_food_text(user_id: int, text: str) -> dict:
+    prompt = (
+        'Analyse this food/meal description and return JSON with this exact structure:\n'
+        '{\n'
+        '  "is_food": <true|false>,\n'
+        '  "dish_name": "<short dish name>",\n'
+        '  "calories_kcal": <estimated float or null>,\n'
+        '  "protein_g": <estimated float or null>,\n'
+        '  "carbs_g": <estimated float or null>,\n'
+        '  "fat_g": <estimated float or null>,\n'
+        '  "fiber_g": <estimated float or null>\n'
+        '}\n\n'
+        f'Description: {text}\n\n'
+        'Rules:\n'
+        '- is_food: false only if the description is clearly not about food or drink\n'
+        '- Estimate a single realistic serving unless quantities are stated\n'
+        '- Estimate all macros in grams; use null only when genuinely impossible\n'
+        '- Return valid JSON only.'
+    )
+    resp = await _client.chat.completions.create(
+        model=settings.DEEPSEEK_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a nutritionist. Estimate calories and macros from meal descriptions."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
+    try:
+        return json.loads(resp.choices[0].message.content)
+    except json.JSONDecodeError:
+        return {"is_food": False}
+
+
 async def generate_workout_insights(logs_data: list) -> dict:
     if not logs_data:
         return {
@@ -518,6 +552,7 @@ async def generate_workout_plan(
     workout_preference: str = "",
     days_to_generate: list[str] | None = None,
     user_timezone: str = "UTC",
+    nutrition_context: str = "",
 ) -> dict:
     try:
         today_name = datetime.now(ZoneInfo(user_timezone or "UTC")).strftime("%A")
@@ -525,6 +560,12 @@ async def generate_workout_plan(
         today_name = datetime.now(_UTC).strftime("%A")
     history_block = logs_context.strip() or "No workout history yet — design a well-rounded beginner-friendly starter plan."
     memory_block = user_memory.strip() or "No additional profile data."
+    nutrition_block = (
+        f"\nNUTRITION (last 14 days, from the user's food logs):\n{nutrition_context.strip()}\n"
+        "Factor energy balance into the plan: in a calorie deficit, moderate the volume and emphasise "
+        "recovery and protein intake in your notes; in a surplus, progressive overload is appropriate."
+        if nutrition_context.strip() else ""
+    )
     pref_block = (
         f"\n⭐ WORKOUT PREFERENCE (user-specified — treat this as the highest priority input):\n{workout_preference.strip()}"
         if workout_preference.strip() else ""
@@ -563,7 +604,7 @@ USER WORKOUT HISTORY (last 4 weeks):
 
 OTHER USER PROFILE DATA:
 {memory_block}
-
+{nutrition_block}
 {scope_line}
 
 Return ONLY this JSON (no markdown fences):
