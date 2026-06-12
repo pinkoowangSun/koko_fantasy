@@ -42,20 +42,15 @@ async def handle_logworkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if summary:
             msg += f"\n_{summary}_"
 
-        if log_id:
-            if calories is not None:
-                msg += f"\n🔥 AI estimated *{calories} kcal* — correct?"
-                keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("✓ Looks right", callback_data=f"cal_ok:{log_id}"),
-                    InlineKeyboardButton("✏️ Correct", callback_data=f"correct_cal:{log_id}"),
-                ]])
-            else:
-                msg += "\n🔥 Calories not estimated — add manually?"
-                keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Add calories", callback_data=f"correct_cal:{log_id}"),
-                ]])
+        if log_id and calories is None:
+            msg += "\n🔥 Calories not estimated — add manually?"
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("Add calories", callback_data=f"correct_cal:{log_id}"),
+            ]])
             await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=keyboard)
         else:
+            if calories is not None:
+                msg += f"\n🔥 *{calories} kcal* (AI estimate — `/editworkout calories=X` to adjust)"
             await update.message.reply_text(msg, parse_mode="Markdown")
     except Exception as exc:
         await update.message.reply_text(f"Couldn't log workout: {exc}")

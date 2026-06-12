@@ -49,29 +49,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     response = (result.get("response") or "").strip()
 
-    # If the AI created a workout log, offer calorie review
+    # If the AI created a workout log, report calories (recorded directly, no confirmation)
     data = result.get("data") or {}
     if result.get("action") == "create" and result.get("domain") == "workout":
         log_id = data.get("log_id")
         calories = data.get("calories_burnt")
         if log_id:
             if calories is not None:
-                response += f"\n\n🔥 AI estimated *{calories} kcal* — correct?"
-                keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("✓ Looks right", callback_data=f"cal_ok:{log_id}"),
-                    InlineKeyboardButton("✏️ Correct", callback_data=f"correct_cal:{log_id}"),
-                ]])
+                response += f"\n\n🔥 *{calories} kcal* (AI estimate — `/editworkout calories=X` to adjust)"
             else:
                 response += "\n\n🔥 Calories not estimated — add manually?"
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton("Add calories", callback_data=f"correct_cal:{log_id}"),
                 ]])
-            await update.message.reply_text(
-                response or "Workout logged!",
-                parse_mode="Markdown",
-                reply_markup=keyboard,
-            )
-            return
+                await update.message.reply_text(
+                    response or "Workout logged!",
+                    parse_mode="Markdown",
+                    reply_markup=keyboard,
+                )
+                return
 
     await update.message.reply_text(
         response or "I'm not sure how to help with that.",
