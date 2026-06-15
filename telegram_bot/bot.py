@@ -12,6 +12,7 @@ from telegram_bot.handlers.search import handle_search
 from telegram_bot.handlers.start import handle_help, handle_start
 from telegram_bot.handlers.tasks import handle_done, handle_tasks
 from telegram_bot.handlers.finance import handle_addgoal, handle_balance, handle_delgoal, handle_finance_goals, handle_income, handle_spend
+from telegram_bot.handlers.mood import handle_mood_callback
 from telegram_bot.handlers.workout import handle_calorie_callback, handle_editworkout, handle_genplan, handle_logworkout, handle_workout
 
 
@@ -41,6 +42,9 @@ def main():
 
     # Calorie correction inline buttons
     app.add_handler(CallbackQueryHandler(handle_calorie_callback, pattern=r"^(cal_ok|correct_cal):\d+$"))
+
+    # Evening check-in mood buttons
+    app.add_handler(CallbackQueryHandler(handle_mood_callback, pattern=r"^mood_checkin:.+$"))
 
     # File uploads
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))

@@ -3,16 +3,28 @@ import httpx
 from datetime import date, datetime, timedelta, timezone as _tz
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.database import AsyncSessionLocal
+from app.models.finance import Transaction
+from app.models.journal import JournalEntry
 from app.models.reminder import Reminder
+from app.models.task import Task
 from app.models.user import User
-from app.models.workout import WorkoutPlan
+from app.models.workout import WorkoutLog, WorkoutPlan
 
 log = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
-MORNING_HOUR = 8  # 8 AM in the user's local timezone
+MORNING_HOUR = 8   # 8 AM in the user's local timezone
+EVENING_HOUR = 21  # 9 PM in the user's local timezone
+
+MOOD_DISPLAY = {
+    "great": "😊 Great",
+    "good": "🙂 Good",
+    "neutral": "😐 Neutral",
+    "low": "😞 Low",
+    "stressed": "😤 Stressed",
+}
 
 
 def _local_now(tz_str: str | None) -> datetime:
@@ -24,12 +36,15 @@ def _local_now(tz_str: str | None) -> datetime:
         return now_utc
 
 
-async def _send_telegram(telegram_id: int, text: str):
+async def _send_telegram(telegram_id: int, text: str, reply_markup: dict | None = None):
     from app.config import settings
+    payload: dict = {"chat_id": telegram_id, "text": text, "parse_mode": "Markdown"}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": telegram_id, "text": text, "parse_mode": "Markdown"},
+            json=payload,
         )
         resp.raise_for_status()
 
@@ -137,14 +152,160 @@ async def send_workout_reminders():
                 log.error("[workout reminder] failed for user %d: %s", user.id, exc)
 
 
+async def send_evening_checkin():
+    """
+    Runs hourly (cron minute=0). At EVENING_HOUR in each user's local timezone,
+    sends a daily summary (tasks, workout, finance) and a mood prompt if not yet checked in.
+    """
+    async with AsyncSessionLocal() as db:
+        users = (await db.execute(
+            select(User).where(
+                User.telegram_id.isnot(None),
+                User.status == "approved",
+            )
+        )).scalars().all()
+
+        for user in users:
+            try:
+                local_now = _local_now(user.timezone)
+                if local_now.hour != EVENING_HOUR:
+                    continue
+
+                local_today = local_now.date()
+
+                # ── Tasks ─────────────────────────────────────────────────────
+                active_tasks = (await db.execute(
+                    select(Task).where(
+                        Task.user_id == user.id,
+                        Task.status.in_(["todo", "in_progress"]),
+                    )
+                )).scalars().all()
+
+                # Convert the user's local day to a UTC window so updated_at
+                # (stored in UTC) is compared correctly for non-UTC users.
+                day_start_utc = (
+                    datetime.combine(local_today, datetime.min.time())
+                    .replace(tzinfo=local_now.tzinfo)
+                    .astimezone(_tz.utc)
+                    .replace(tzinfo=None)
+                )
+                day_end_utc = day_start_utc + timedelta(days=1)
+
+                done_today = (await db.execute(
+                    select(func.count(Task.id)).where(
+                        Task.user_id == user.id,
+                        Task.status == "done",
+                        Task.updated_at >= day_start_utc,
+                        Task.updated_at < day_end_utc,
+                    )
+                )).scalar() or 0
+
+                # ── Workout ───────────────────────────────────────────────────
+                workout_log = (await db.execute(
+                    select(WorkoutLog).where(
+                        WorkoutLog.user_id == user.id,
+                        WorkoutLog.log_date == local_today,
+                    ).order_by(WorkoutLog.created_at.desc()).limit(1)
+                )).scalars().first()
+
+                # ── Finance ───────────────────────────────────────────────────
+                transactions = (await db.execute(
+                    select(Transaction).where(
+                        Transaction.user_id == user.id,
+                        Transaction.transaction_date == local_today,
+                    )
+                )).scalars().all()
+
+                # ── Mood ──────────────────────────────────────────────────────
+                mood_entry = (await db.execute(
+                    select(JournalEntry).where(
+                        JournalEntry.user_id == user.id,
+                        JournalEntry.entry_date == local_today,
+                        JournalEntry.mood.isnot(None),
+                    ).order_by(JournalEntry.created_at.desc()).limit(1)
+                )).scalars().first()
+
+                # ── Build message ─────────────────────────────────────────────
+                today_str = local_today.strftime("%a %d %b")
+                lines = [f"🌙 *Daily Wrap-Up — {today_str}*\n"]
+
+                # Tasks row: only if there are active or done-today tasks
+                if active_tasks or done_today:
+                    parts = []
+                    if done_today:
+                        parts.append(f"{done_today} done")
+                    ip = sum(1 for t in active_tasks if t.status == "in_progress")
+                    td = sum(1 for t in active_tasks if t.status == "todo")
+                    overdue = sum(
+                        1 for t in active_tasks
+                        if t.due_date and t.due_date.date() < local_today
+                    )
+                    if ip:
+                        parts.append(f"{ip} in progress")
+                    if td:
+                        parts.append(f"{td} to do")
+                    if overdue:
+                        parts.append(f"{overdue} overdue ⚠️")
+                    lines.append(f"📋 Tasks: {' · '.join(parts)}")
+
+                # Workout row: always show
+                if workout_log:
+                    cat = (workout_log.category or "workout").replace("_", " ").title()
+                    w_parts = [cat]
+                    if workout_log.duration_min:
+                        w_parts.append(f"{workout_log.duration_min}min")
+                    if workout_log.calories_burnt:
+                        w_parts.append(f"{workout_log.calories_burnt} kcal")
+                    lines.append(f"💪 Workout: {' · '.join(w_parts)}")
+                else:
+                    lines.append("💪 Workout: rest day")
+
+                # Finance row: only if there are transactions today
+                if transactions:
+                    currency = transactions[0].currency
+                    spent = sum(t.amount for t in transactions if t.transaction_type == "expense")
+                    earned = sum(t.amount for t in transactions if t.transaction_type == "income")
+                    f_parts = []
+                    if spent:
+                        f_parts.append(f"Spent {currency} {spent:.0f}")
+                    if earned:
+                        f_parts.append(f"Earned {currency} {earned:.0f}")
+                    f_parts.append(f"{len(transactions)} transaction(s)")
+                    lines.append(f"💰 Finance: {' · '.join(f_parts)}")
+
+                # Mood section
+                if mood_entry:
+                    lines.append(f"\nMood today: {MOOD_DISPLAY.get(mood_entry.mood, mood_entry.mood)}")
+                    await _send_telegram(user.telegram_id, "\n".join(lines))
+                else:
+                    lines.append("\nHow's your day been?")
+                    keyboard = {"inline_keyboard": [[
+                        {"text": "😊 Great",    "callback_data": "mood_checkin:great"},
+                        {"text": "🙂 Good",     "callback_data": "mood_checkin:good"},
+                        {"text": "😐 Neutral",  "callback_data": "mood_checkin:neutral"},
+                        {"text": "😞 Low",      "callback_data": "mood_checkin:low"},
+                        {"text": "😤 Stressed", "callback_data": "mood_checkin:stressed"},
+                    ]]}
+                    await _send_telegram(user.telegram_id, "\n".join(lines), reply_markup=keyboard)
+
+                log.info("[evening checkin] sent to user %d (tz=%s)", user.id, user.timezone)
+
+            except Exception as exc:
+                log.error("[evening checkin] failed for user %d: %s", user.id, exc)
+
+
 def start_scheduler():
     scheduler.add_job(check_and_send_reminders, "interval", minutes=1, id="reminders",
                       misfire_grace_time=30)
-    # Run every minute so each user is checked against their own local time
     scheduler.add_job(send_workout_reminders, "cron", minute=0, id="workout_reminders",
                       misfire_grace_time=60)
+    scheduler.add_job(send_evening_checkin, "cron", minute=0, id="evening_checkin",
+                      misfire_grace_time=60)
     scheduler.start()
-    log.info("[scheduler] started — reminders every 1 min, workout briefing at %02d:00 local per user", MORNING_HOUR)
+    log.info(
+        "[scheduler] started — reminders every 1 min, workout at %02d:00, check-in at %02d:00 local per user",
+        MORNING_HOUR, EVENING_HOUR,
+    )
 
 
 def stop_scheduler():

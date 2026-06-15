@@ -1750,6 +1750,38 @@ async def _send_telegram_message(chat_id: int, text: str):
         )
 
 
+class BotMoodCheckin(BaseModel):
+    telegram_id: int
+    mood: str
+
+
+@router.post("/mood", dependencies=[Depends(_bot_auth)])
+async def bot_save_mood(body: BotMoodCheckin, db: AsyncSession = Depends(get_db)):
+    user = await _require_user(body.telegram_id, db)
+    local_today = _local_date(user)
+
+    existing = (await db.execute(
+        select(JournalEntry).where(
+            JournalEntry.user_id == user.id,
+            JournalEntry.entry_date == local_today,
+            JournalEntry.mood.isnot(None),
+        ).order_by(JournalEntry.created_at.desc()).limit(1)
+    )).scalars().first()
+
+    if existing:
+        existing.mood = body.mood
+    else:
+        db.add(JournalEntry(
+            user_id=user.id,
+            entry_date=local_today,
+            mood=body.mood,
+            source="bot",
+        ))
+
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/users/{user_id}/approve", dependencies=[Depends(_bot_auth)])
 async def bot_approve_user(user_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == user_id))
