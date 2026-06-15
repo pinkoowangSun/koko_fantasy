@@ -1,14 +1,11 @@
 import base64
 import json
 
-from openai import AsyncOpenAI
+import anthropic
 
 from app.config import settings
 
-_client = AsyncOpenAI(
-    api_key=settings.VISION_API_KEY,
-    base_url=settings.VISION_BASE_URL,
-)
+_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 _MODEL = settings.VISION_MODEL
 
@@ -28,15 +25,19 @@ _SYSTEM_PROMPT = (
 
 async def analyze_image(image_bytes: bytes, caption: str = "") -> dict:
     """
-    Analyze an image with DeepSeek-VL2 via the OpenAI-compatible API.
+    Analyze an image with Claude Haiku via the Anthropic API.
     Returns a dict with is_food=True and nutrition fields, or is_food=False and a reply.
     """
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
     user_content = [
         {
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": b64,
+            },
         },
         {
             "type": "text",
@@ -44,16 +45,14 @@ async def analyze_image(image_bytes: bytes, caption: str = "") -> dict:
         },
     ]
 
-    resp = await _client.chat.completions.create(
+    resp = await _client.messages.create(
         model=_MODEL,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_content}],
         max_tokens=512,
     )
 
-    raw = resp.choices[0].message.content.strip()
+    raw = resp.content[0].text.strip()
 
     if raw.startswith("```"):
         parts = raw.split("```")
