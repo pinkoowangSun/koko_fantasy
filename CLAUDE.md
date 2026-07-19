@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-**Koko** is an AI-powered personal life management assistant. It has three components that communicate with each other:
+**Koko** is an AI-powered personal life management assistant. It has four runtime components that communicate with each other:
 - **Backend** (`/backend`) — FastAPI + SQLAlchemy async + SQLite; serves both the REST API and the frontend static files
+- **Scheduler** (`backend/app/scheduler.py`) — standalone APScheduler process for reminders and proactive Telegram notifications
 - **Telegram Bot** (`/telegram_bot`) — polls Telegram, interprets commands and free-text via AI, calls the backend
 - **Frontend** (`/frontend`) — vanilla HTML + Alpine.js + Tailwind; served from `/frontend/pages/` by the backend at routes like `/dashboard`, `/tasks`, etc.
 
@@ -17,6 +18,12 @@ cd backend
 pip install -r requirements.txt
 cd ..                          # run from repo root so relative paths work
 uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Scheduler (separate terminal)
+```bash
+cd backend
+python -m app.scheduler
 ```
 
 ### Telegram Bot (separate terminal)
@@ -45,7 +52,7 @@ See `.env.example`. The critical ones:
 | `TELEGRAM_BOT_USERNAME` | For login widget (no `@`) |
 | `JWT_SECRET` | Signing JWTs |
 | `BOT_API_KEY` | Shared secret between bot ↔ backend |
-| `ASSET_ENCRYPTION_KEY` | Fernet key for finance data at rest |
+| `ASSET_ENCRYPTION_KEY` | Fernet key for asset balance amounts at rest |
 | `SUPER_ADMIN_TELEGRAM_ID` | Receives user approval requests |
 
 Generate a Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
@@ -73,10 +80,15 @@ Every ORM model has a `user_id` FK. All queries must filter by `current_user.id`
 3. New users start as `status="pending"`; super admin approves via Telegram inline button
 
 ### Finance Encryption
-Transaction and asset amounts are encrypted with Fernet (`ASSET_ENCRYPTION_KEY`) before being stored in SQLite.
+Asset balance amounts are encrypted with Fernet (`ASSET_ENCRYPTION_KEY`) before
+being stored in SQLite. Transaction amounts and finance-goal amounts remain
+ordinary SQLite numeric fields so they can be filtered and aggregated.
 
 ### Reminders
-APScheduler runs inside the backend process, checking every minute for due reminders and sending them via the Telegram Bot API.
+APScheduler runs as the standalone `app.scheduler` process. It checks every
+minute for due reminders and local-time workout/check-in notifications, then
+sends them through the Telegram Bot API. Do not run more than one scheduler
+replica.
 
 ## Key Directories
 
@@ -93,7 +105,11 @@ APScheduler runs inside the backend process, checking every minute for due remin
 
 ## Tests
 
-There are no automated tests. Manual testing is done through the Telegram bot and the web frontend.
+Run the regression tests from the repository root:
+
+```bash
+PYTHONPATH=backend:. python -m unittest discover -s tests
+```
 
 ## Adding a New Feature Domain
 

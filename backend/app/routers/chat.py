@@ -13,7 +13,7 @@ from app.models.memory import MemoryItem
 from app.models.user import User
 from app.routers.auth import require_approved
 from app.routers.bot import _execute_read, _execute_write
-from app.services.ai_service import classify_intent, generate_contextual_response
+from app.services.ai_service import classify_intent, generate_contextual_response, save_chat_turn
 from app.services.context_service import build_rich_context, refresh_profile_summary
 from app.services.intent_registry import ACTION_CONFIGS, DOMAIN_CONFIGS
 
@@ -33,6 +33,11 @@ async def web_chat_message(
     user = current_user
     user_tz = user.timezone or "UTC"
 
+    async def respond(response: str) -> dict:
+        final_response = response or ""
+        await save_chat_turn(user.id, body.message, final_response, "web", db=db)
+        return {"response": final_response}
+
     memory_items = (await db.execute(
         select(MemoryItem).where(MemoryItem.user_id == user.id).limit(20)
     )).scalars().all()
@@ -51,7 +56,7 @@ async def web_chat_message(
     action_cfg = ACTION_CONFIGS.get(phase1.action)
 
     if not action_cfg:
-        return {"response": phase1.response}
+        return await respond(phase1.response)
 
     tier = action_cfg.tier
 
@@ -59,16 +64,16 @@ async def web_chat_message(
         result = await _execute_write(phase1.action, phase1.domain, phase1.data, user, db)
         if action_cfg.profile_refresh:
             asyncio.create_task(refresh_profile_summary(user.id))
-        return {"response": result.get("response") or phase1.response}
+        return await respond(result.get("response") or phase1.response)
 
     if tier == "read":
         result = await _execute_read(phase1.action, phase1.domain, phase1.data, user, db)
         if result is not None:
-            return {"response": result.get("response") or phase1.response}
+            return await respond(result.get("response") or phase1.response)
         domain_cfg = DOMAIN_CONFIGS.get(phase1.domain)
         scope = [domain_cfg.scope_kw] if domain_cfg and domain_cfg.scope_kw else []
         if not scope:
-            return {"response": phase1.response}
+            return await respond(phase1.response)
         rich_ctx = await build_rich_context(user.id, db, scope, user_timezone=user_tz)
         response = await generate_contextual_response(
             user_id=user.id,
@@ -77,11 +82,11 @@ async def web_chat_message(
             rich_context=rich_ctx,
             user_timezone=user_tz,
         )
-        return {"response": response}
+        return await respond(response)
 
     if tier == "conversational":
         if not phase1.context_scope:
-            return {"response": phase1.response}
+            return await respond(phase1.response)
         use_tools = "tools" in phase1.context_scope
         data_scope = [s for s in phase1.context_scope if s != "tools"]
         rich_ctx = await build_rich_context(user.id, db, data_scope, user_timezone=user_tz) if data_scope else ""
@@ -93,6 +98,6 @@ async def web_chat_message(
             user_timezone=user_tz,
             use_tools=use_tools,
         )
-        return {"response": response}
+        return await respond(response)
 
-    return {"response": phase1.response}
+    return await respond(phase1.response)

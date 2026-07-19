@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build:
@@ -10,6 +8,18 @@ services:
     env_file: .env
     volumes:
       - ./data:/app/data
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.scheduler"]
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - backend
     restart: unless-stopped
 
   telegram_bot:

@@ -12,7 +12,12 @@ from app.models.document import Document
 from app.models.user import User
 from app.routers.auth import require_approved
 from app.schemas.document import DocumentQARequest, DocumentResponse
-from app.services.rag_service import extract_text, index_document, query_and_answer
+from app.services.rag_service import (
+    delete_document_index,
+    extract_text,
+    index_document,
+    query_and_answer,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -125,6 +130,9 @@ async def delete_document(
     if not str(resolved).startswith(str(user_dir)):
         raise HTTPException(400, "Invalid file path")
 
+    # Remove retrievable chunks before deleting the source record. The vector
+    # operation is idempotent, so a failed later step can safely be retried.
+    await delete_document_index(current_user.id, doc.id)
     resolved.unlink(missing_ok=True)
     await db.delete(doc)
     await db.commit()

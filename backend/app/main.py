@@ -9,7 +9,6 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import init_db
 from app.routers import auth, bot, briefing, calendar, chat, documents, finance, journal, memory, nutrition, search, tasks, users, workout
-from app.services.reminder_service import start_scheduler, stop_scheduler
 
 FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
 
@@ -17,9 +16,7 @@ FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    start_scheduler()
     yield
-    stop_scheduler()
 
 
 app = FastAPI(title="Koko — Personal Life Manager", lifespan=lifespan)

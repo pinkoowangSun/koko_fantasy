@@ -64,6 +64,17 @@ source .venv/bin/activate
 python -m telegram_bot.bot
 ```
 
+### 6. Run scheduler (separate terminal)
+
+```bash
+cd /root/koko_fantasy/backend
+source .venv/bin/activate
+python -m app.scheduler
+```
+
+The scheduler must run as a single process. It is intentionally separate from
+Uvicorn so multiple web workers do not duplicate notifications.
+
 ---
 
 ## Docker Compose
@@ -122,12 +133,13 @@ koko_fantasy/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py          # FastAPI app, mounts all routers
+│   │   ├── scheduler.py     # Standalone reminders/notification worker
 │   │   ├── config.py        # Settings from .env
 │   │   ├── database.py      # SQLAlchemy async + SQLite
 │   │   ├── models/          # ORM models (User, Task, Journal, …)
 │   │   ├── schemas/         # Pydantic request/response schemas
 │   │   ├── routers/         # API route handlers
-│   │   └── services/        # AI, RAG, reminder scheduler
+│   │   └── services/        # AI, RAG, reminder jobs
 │   └── requirements.txt
 ├── telegram_bot/
 │   ├── bot.py               # Entry point, registers handlers

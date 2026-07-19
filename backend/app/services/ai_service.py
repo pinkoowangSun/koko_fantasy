@@ -91,11 +91,25 @@ async def _get_recent_history(user_id: int, limit: int = 10) -> list[dict]:
         return [{"role": r.role, "content": r.content} for r in reversed(rows)]
 
 
-async def _save_messages(user_id: int, user_msg: str, assistant_msg: str, source: str) -> None:
-    async with AsyncSessionLocal() as db:
-        db.add(ChatHistory(user_id=user_id, role="user", content=user_msg, source=source))
-        db.add(ChatHistory(user_id=user_id, role="assistant", content=assistant_msg, source=source))
-        await db.commit()
+async def save_chat_turn(
+    user_id: int,
+    user_msg: str,
+    assistant_msg: str,
+    source: str,
+    db: AsyncSession | None = None,
+) -> None:
+    """Persist one completed user/assistant turn after orchestration finishes."""
+    async def persist(session: AsyncSession) -> None:
+        session.add(ChatHistory(user_id=user_id, role="user", content=user_msg, source=source))
+        session.add(ChatHistory(user_id=user_id, role="assistant", content=assistant_msg, source=source))
+        await session.commit()
+
+    if db is not None:
+        await persist(db)
+        return
+
+    async with AsyncSessionLocal() as session:
+        await persist(session)
 
 
 # ── Phase 1: classify intent ──────────────────────────────────────────────────
@@ -105,7 +119,9 @@ async def classify_intent(
 ) -> Phase1Response:
     """
     Phase 1 LLM call: classify action + domain + context_scope.
-    Validates output with Pydantic; retries once on failure; falls back to safe default.
+    Validates output with Pydantic; retries once on failure; falls back to safe
+    default. This function does not persist history: the caller records the
+    completed turn after the final user-visible response is known.
     """
     history = await _get_recent_history(user_id, limit=6)
     system = INTENT_SYSTEM_PROMPT + "\n\n" + _datetime_block(user_timezone)
@@ -126,7 +142,6 @@ async def classify_intent(
         )
         raw = resp.choices[0].message.content
         result = Phase1Response.model_validate(json.loads(raw))
-        await _save_messages(user_id, message, result.response, "telegram")
         return result
 
     except (ValidationError, json.JSONDecodeError, ValueError):
@@ -147,13 +162,11 @@ async def classify_intent(
             )
             raw2 = resp2.choices[0].message.content
             result = Phase1Response.model_validate(json.loads(raw2))
-            await _save_messages(user_id, message, result.response, "telegram")
             return result
         except Exception:
             pass
 
     fallback = _FALLBACK.model_copy()
-    await _save_messages(user_id, message, fallback.response, "telegram")
     return fallback
 
 
@@ -180,7 +193,8 @@ async def generate_contextual_response(
 
     When use_tools=True, runs an agentic loop: the model may call web_search,
     get_stock_price, get_weather, or calculate; results are fed back until the
-    model returns a final text reply (max 5 rounds).
+    model returns a final text reply (max 5 rounds). History persistence is
+    owned by the outer orchestrator so the current turn appears exactly once.
     """
     from app.services.tools_service import TOOL_DEFINITIONS, execute_tool
 
@@ -208,7 +222,6 @@ async def generate_contextual_response(
                 temperature=0.7,
             )
             reply = resp.choices[0].message.content
-            await _save_messages(user_id, message, reply, "telegram")
             return reply
 
         # Agentic tool loop (max 5 rounds)
@@ -252,7 +265,6 @@ async def generate_contextual_response(
                     "content": json.dumps(result, default=str),
                 })
 
-        await _save_messages(user_id, message, reply, "telegram")
         return reply
 
     except Exception as exc:

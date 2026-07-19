@@ -57,6 +57,16 @@ async def index_document(user_id: int, doc_id: int, text: str, meta: dict):
     )
 
 
+async def delete_document_index(user_id: int, doc_id: int) -> None:
+    """Idempotently remove every vector chunk belonging to one document."""
+    collection = _get_collection(user_id)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        None,
+        lambda: collection.delete(where={"doc_id": doc_id}),
+    )
+
+
 async def query_and_answer(user_id: int, question: str, doc_id: int | None = None) -> str:
     collection = _get_collection(user_id)
     where = {"doc_id": doc_id} if doc_id else None

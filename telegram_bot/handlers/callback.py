@@ -25,10 +25,14 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
 
     try:
         if action == "approve":
-            await api("post", f"/users/{user_id}/approve")
+            await api("post", f"/users/{user_id}/approve", json={
+                "actor_telegram_id": query.from_user.id,
+            })
             await query.edit_message_text(f"✅ User #{user_id} approved.")
         elif action == "reject":
-            await api("post", f"/users/{user_id}/reject")
+            await api("post", f"/users/{user_id}/reject", json={
+                "actor_telegram_id": query.from_user.id,
+            })
             await query.edit_message_text(f"❌ User #{user_id} rejected.")
     except Exception as exc:
         log.error("[callback] approval action=%s user=%s failed: %s", action, user_id, exc)

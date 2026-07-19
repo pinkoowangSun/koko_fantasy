@@ -136,7 +136,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">Finance</h1>
-        <p style="font-size:13px;color:#78776E;margin-top:2px">Build financial health, reach your goals — your data is encrypted and yours alone.</p>
+        <p style="font-size:13px;color:#78776E;margin-top:2px">Build financial health and reach your goals. Asset balances are encrypted at rest.</p>
       </div>
       <div style="display:flex;gap:8px">
         <button @click="openSettings()" class="btn btn-secondary" title="Default accounts">⚙ Accounts</button>
@@ -417,7 +417,7 @@
     <!-- ── TAB: ASSETS ────────────────────────────────────────────────────── -->
     <div x-show="activeTab==='assets'">
       <div class="enc-banner">
-        🔒 Asset amounts are encrypted at rest. Only you can see them.
+        🔒 Asset amounts are encrypted at rest. Transaction and goal amounts are stored as regular database fields.
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">

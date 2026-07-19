@@ -75,8 +75,8 @@ async def check_and_send_reminders():
 
 async def send_workout_reminders():
     """
-    Runs every minute. For each approved user, sends their morning workout
-    summary at exactly MORNING_HOUR:00 in *their* local timezone.
+    For each approved user, send their morning workout summary at exactly
+    MORNING_HOUR:00 in their local timezone.
     """
     async with AsyncSessionLocal() as db:
         users = (await db.execute(
@@ -91,7 +91,7 @@ async def send_workout_reminders():
                 local_now = _local_now(user.timezone)
 
                 # Send only at the exact minute the user's local clock hits MORNING_HOUR:00
-                if local_now.hour != MORNING_HOUR:
+                if local_now.hour != MORNING_HOUR or local_now.minute != 0:
                     continue
 
                 local_today = local_now.date()
@@ -154,8 +154,8 @@ async def send_workout_reminders():
 
 async def send_evening_checkin():
     """
-    Runs hourly (cron minute=0). At EVENING_HOUR in each user's local timezone,
-    sends a daily summary (tasks, workout, finance) and a mood prompt if not yet checked in.
+    At EVENING_HOUR:00 in each user's local timezone, send a daily summary
+    (tasks, workout, finance) and a mood prompt if not yet checked in.
     """
     async with AsyncSessionLocal() as db:
         users = (await db.execute(
@@ -168,7 +168,7 @@ async def send_evening_checkin():
         for user in users:
             try:
                 local_now = _local_now(user.timezone)
-                if local_now.hour != EVENING_HOUR:
+                if local_now.hour != EVENING_HOUR or local_now.minute != 0:
                     continue
 
                 local_today = local_now.date()
@@ -295,15 +295,34 @@ async def send_evening_checkin():
 
 
 def start_scheduler():
-    scheduler.add_job(check_and_send_reminders, "interval", minutes=1, id="reminders",
-                      misfire_grace_time=30)
-    scheduler.add_job(send_workout_reminders, "cron", minute=0, id="workout_reminders",
-                      misfire_grace_time=60)
-    scheduler.add_job(send_evening_checkin, "cron", minute=0, id="evening_checkin",
-                      misfire_grace_time=60)
+    common = {
+        "trigger": "interval",
+        "minutes": 1,
+        "replace_existing": True,
+        "coalesce": True,
+        "max_instances": 1,
+    }
+    scheduler.add_job(
+        check_and_send_reminders,
+        id="reminders",
+        misfire_grace_time=30,
+        **common,
+    )
+    scheduler.add_job(
+        send_workout_reminders,
+        id="workout_reminders",
+        misfire_grace_time=60,
+        **common,
+    )
+    scheduler.add_job(
+        send_evening_checkin,
+        id="evening_checkin",
+        misfire_grace_time=60,
+        **common,
+    )
     scheduler.start()
     log.info(
-        "[scheduler] started — reminders every 1 min, workout at %02d:00, check-in at %02d:00 local per user",
+        "[scheduler] started — checks every minute; workout at %02d:00 and check-in at %02d:00 local per user",
         MORNING_HOUR, EVENING_HOUR,
     )
 

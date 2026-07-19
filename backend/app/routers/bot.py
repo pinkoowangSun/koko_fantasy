@@ -31,6 +31,7 @@ from app.services.ai_service import (
     parse_finance_transaction,
     parse_finance_goal,
     parse_workout_log,
+    save_chat_turn,
     generate_workout_plan,
 )
 from app.services.context_service import build_rich_context, refresh_profile_summary
@@ -177,6 +178,9 @@ async def _require_user(telegram_id: int, db: AsyncSession) -> User:
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not registered. Send /start first.")
+    if user.status != "approved":
+        detail = "pending_approval" if user.status == "pending" else "access_rejected"
+        raise HTTPException(403, detail)
     return user
 
 
@@ -1064,10 +1068,20 @@ class IntentRequest(BaseModel):
 async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
     user = await _get_or_create_user(body.telegram_id, body.username, db)
 
+    async def finalize(payload: dict) -> dict:
+        await save_chat_turn(
+            user.id,
+            body.message,
+            payload.get("response") or "",
+            "telegram",
+            db=db,
+        )
+        return payload
+
     if user.status == "pending":
-        return {"action": "chat", "domain": "", "response": "⏳ Your access request has been sent to the admin. You'll be able to use Koko once it's approved.", "data": {}}
+        return await finalize({"action": "chat", "domain": "", "response": "⏳ Your access request has been sent to the admin. You'll be able to use Koko once it's approved.", "data": {}})
     if user.status == "rejected":
-        return {"action": "chat", "domain": "", "response": "❌ Your access request was not approved.", "data": {}}
+        return await finalize({"action": "chat", "domain": "", "response": "❌ Your access request was not approved.", "data": {}})
 
     # Auto-set timezone from language_code if still at default
     if user.timezone == "UTC" and body.language_code:
@@ -1100,7 +1114,7 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
     action_cfg = ACTION_CONFIGS.get(phase1.action)
 
     if not action_cfg:
-        return {"action": "chat", "domain": "", "response": phase1.response, "data": {}}
+        return await finalize({"action": "chat", "domain": "", "response": phase1.response, "data": {}})
 
     tier = action_cfg.tier
 
@@ -1109,18 +1123,18 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
         result = await _execute_write(phase1.action, phase1.domain, phase1.data, user, db)
         if action_cfg.profile_refresh:
             asyncio.create_task(refresh_profile_summary(user.id))
-        return {"action": phase1.action, "domain": phase1.domain, **result}
+        return await finalize({"action": phase1.action, "domain": phase1.domain, **result})
 
     # READ
     if tier == "read":
         result = await _execute_read(phase1.action, phase1.domain, phase1.data, user, db)
         if result is not None:
-            return {"action": phase1.action, "domain": phase1.domain, **result}
+            return await finalize({"action": phase1.action, "domain": phase1.domain, **result})
         # No hardcoded handler — fall through to conversational with domain context
         domain_cfg = DOMAIN_CONFIGS.get(phase1.domain)
         scope = [domain_cfg.scope_kw] if domain_cfg and domain_cfg.scope_kw else []
         if not scope:
-            return {"action": "chat", "domain": phase1.domain, "response": phase1.response, "data": {}}
+            return await finalize({"action": "chat", "domain": phase1.domain, "response": phase1.response, "data": {}})
         rich_ctx = await build_rich_context(user.id, db, scope, user_timezone=user_tz)
         response = await generate_contextual_response(
             user_id=user.id,
@@ -1129,12 +1143,12 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
             rich_context=rich_ctx,
             user_timezone=user_tz,
         )
-        return {"action": "chat", "domain": phase1.domain, "response": response, "data": {}}
+        return await finalize({"action": "chat", "domain": phase1.domain, "response": response, "data": {}})
 
     # CONVERSATIONAL
     if tier == "conversational":
         if not phase1.context_scope:
-            return {"action": "chat", "domain": "", "response": phase1.response, "data": {}}
+            return await finalize({"action": "chat", "domain": "", "response": phase1.response, "data": {}})
 
         use_tools = "tools" in phase1.context_scope
         data_scope = [s for s in phase1.context_scope if s != "tools"]
@@ -1147,10 +1161,10 @@ async def bot_intent(body: IntentRequest, db: AsyncSession = Depends(get_db)):
             user_timezone=user_tz,
             use_tools=use_tools,
         )
-        return {"action": "chat", "domain": "", "response": response, "data": {}}
+        return await finalize({"action": "chat", "domain": "", "response": response, "data": {}})
 
     # MEDIA (handled by /media/{domain}, shouldn't arrive via text)
-    return {"action": phase1.action, "domain": phase1.domain, "response": phase1.response, "data": {}}
+    return await finalize({"action": phase1.action, "domain": phase1.domain, "response": phase1.response, "data": {}})
 
 
 # ── Direct endpoints (used by command handlers + web, unchanged contracts) ─────
@@ -1782,8 +1796,18 @@ async def bot_save_mood(body: BotMoodCheckin, db: AsyncSession = Depends(get_db)
     return {"ok": True}
 
 
+class BotApprovalAction(BaseModel):
+    actor_telegram_id: int
+
+
 @router.post("/users/{user_id}/approve", dependencies=[Depends(_bot_auth)])
-async def bot_approve_user(user_id: int, db: AsyncSession = Depends(get_db)):
+async def bot_approve_user(
+    user_id: int,
+    body: BotApprovalAction,
+    db: AsyncSession = Depends(get_db),
+):
+    if body.actor_telegram_id != settings.SUPER_ADMIN_TELEGRAM_ID:
+        raise HTTPException(403, "Admin only")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -1799,7 +1823,13 @@ async def bot_approve_user(user_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/users/{user_id}/reject", dependencies=[Depends(_bot_auth)])
-async def bot_reject_user(user_id: int, db: AsyncSession = Depends(get_db)):
+async def bot_reject_user(
+    user_id: int,
+    body: BotApprovalAction,
+    db: AsyncSession = Depends(get_db),
+):
+    if body.actor_telegram_id != settings.SUPER_ADMIN_TELEGRAM_ID:
+        raise HTTPException(403, "Admin only")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
